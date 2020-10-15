@@ -77,7 +77,7 @@ def generate_launch_description():
 
     declare_use_sim_time_cmd = DeclareLaunchArgument(
         'use_sim_time',
-        default_value='true',
+        default_value='false',
         description='Use simulation (Gazebo) clock if true')
 
     declare_params_file_cmd = DeclareLaunchArgument(
@@ -117,7 +117,7 @@ def generate_launch_description():
                           'use_namespace': 'False',
                           'rviz_config': rviz_config_file}.items())
 
-    bringup_cmd = IncludeLaunchDescription(
+    nav2_bringup_cmd = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(launch_dir, 'bringup_launch.py')),
         launch_arguments={'namespace': namespace,
@@ -147,23 +147,23 @@ def generate_launch_description():
 
     # Add the actions to launch all of the navigation nodes
     ld.add_action(rviz_cmd)
-    ld.add_action(bringup_cmd)
+    ld.add_action(nav2_bringup_cmd)
 
     # Add turtlesim
-    ld.add_action(Node(
-        package='turtlesim',
-        namespace='turtlesim1',
-        executable='turtlesim_node',
-        name='sim',
-        remappings=[("/turtlesim1/turtle1/cmd_vel", "/cmd_vel")]
-    ))
+#    ld.add_action(Node(
+#        package='turtlesim',
+#        namespace='turtlesim1',
+#        executable='turtlesim_node',
+#        name='sim',
+#        remappings=[("/turtlesim1/turtle1/cmd_vel", "/cmd_vel")]
+#    ))
 
     # Add tf2 broadcaster
-    ld.add_action(Node(
-        package='hadabot_tf2',
-        executable='hadabot_tf2_broadcaster',
-        name='hadabot_tf2_broadbaster_node',
-        remappings=[("/pose", "/turtlesim1/turtle1/pose")]
-    ))
+#    ld.add_action(Node(
+#        package='hadabot_tf2',
+#        executable='hadabot_tf2_broadcaster',
+#        name='hadabot_tf2_broadbaster_node',
+#        remappings=[("/pose", "/turtlesim1/turtle1/pose")]
+#    ))
 
     return ld
