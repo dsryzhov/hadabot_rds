@@ -1,49 +1,47 @@
-#include <rcl/rcl.h>
-#include <rcl/error_handling.h>
-#include <rclc/rclc.h>
-#include <rclc/executor.h>
-#include <std_msgs/msg/header.h>
-#include <std_msgs/msg/string.h>
-#include <std_msgs/msg/float32.h>
-#include <geometry_msgs/msg/twist.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <time.h>
-
-#ifdef ESP_PLATFORM
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
-#endif
-
-#define STRING_BUFFER_LEN 50
-
-#define RCCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){printf("Failed status on line %d: %d. Aborting.\n",__LINE__,(int)temp_rc);vTaskDelete(NULL);}}
-#define RCSOFTCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){printf("Failed status on line %d: %d. Continuing.\n",__LINE__,(int)temp_rc);}}
-
-#include "esp_attr.h"
-
-#include "driver/mcpwm.h"
-#include "soc/mcpwm_periph.h"
-//#include "driver/pcnt.h"
-//#include "driver/periph_ctrl.h"
-#include "driver/gpio.h"
-#include "driver/timer.h"
-
-#define TIMER_DIVIDER         16  //  Hardware timer clock divider
-#define TIMER_SCALE           (TIMER_BASE_CLK / TIMER_DIVIDER)  // convert counter value to seconds
-
-
-
-// ++++++++++++++++++++++++++ Измерение радиальной скорости
-
-#define LW_SENSOR_GPIO     4
-#define RW_SENSOR_GPIO     2
-#define GPIO_INPUT_PIN_SEL  ((1ULL<<LW_SENSOR_GPIO) | (1ULL<<RW_SENSOR_GPIO))
-#define ESP_INTR_FLAG_DEFAULT 0
+#include "motor.h"
+#include "Arduino.h"
 
 
 void wheel_sensors_init();
+
+class RotationSensor {
+public:
+	RotationSensor(char* _sensor_name, uint32_t _sensor_pin, uint8_t _timer_num, Motor* _pMotor);
+	~RotationSensor();
+	
+	inline float getAngularVelocity() {return angular_velocity;};
+	inline void setAngularVelocity(float _angular_velocity) {angular_velocity = _angular_velocity;};
+	
+	inline uint32_t getSensorPIN() {return sensor_pin;};
+	inline hw_timer_t* getHwTimer() {return timer;}
+	
+	inline int getSensorLevel() {return sensor_level;}
+	inline void setSensorLevel(int _sensor_level) { sensor_level = _sensor_level;}
+	
+	inline void setLastMeasuredTime(double _last_measured_time) {last_measured_time = _last_measured_time;}
+	inline double getLastMeasuredTime() {return last_measured_time;}
+	
+	inline xQueueHandle getSensorEvtQueue() {return sensor_evt_queue;}
+	inline Motor* getMotor() {return pMotor;}
+	
+	inline portMUX_TYPE& getTimerMux() {return timerMux;}
+	
+protected:
+	char* sensor_name;
+	uint32_t sensor_pin;
+	uint8_t timer_num;
+	hw_timer_t * timer = NULL;
+	Motor* pMotor;
+	
+	
+	int sensor_level;
+	double last_measured_time; // in seconds
+	float angular_velocity;
+	volatile SemaphoreHandle_t timerSemaphore;
+	portMUX_TYPE timerMux;
+	
+	xQueueHandle sensor_evt_queue = NULL;
+};
 
 
 

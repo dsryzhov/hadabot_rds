@@ -1,52 +1,26 @@
-#include <rcl/rcl.h>
-#include <rcl/error_handling.h>
-#include <rclc/rclc.h>
-#include <rclc/executor.h>
-#include <std_msgs/msg/header.h>
-#include <std_msgs/msg/string.h>
-#include <std_msgs/msg/float32.h>
-#include <geometry_msgs/msg/twist.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <time.h>
+#ifndef __MOTOR_H
+#define __MOTOR_H
 
-#ifdef ESP_PLATFORM
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
+#include <cstdint>
+
+enum EMotorState {STOPED = 0, FORWARD = 1, BACKWARD = -1, STOPING_FORWARD = 2, STOPING_BACKWARD = -2};
+
+class Motor {
+public:
+	Motor(uint8_t _forward_channel, uint8_t _backward_channel, uint8_t forward_pin_num, uint8_t backward_pin_num, double freq=1000);
+	~Motor(); 
+	void forward(float duty_ratio);
+	void backward(float duty_ratio);
+	void stop();
+	void updateRotation(float factor);
+	inline EMotorState getMotorState() {return motor_state; }
+protected:
+	uint8_t forward_channel;
+	uint8_t backward_channel;
+	EMotorState motor_state;	
+	
+	void ledcAnalogWrite(uint8_t channel, float duty_ratio);
+	
+};
+
 #endif
-
-
-#include "esp_attr.h"
-
-#include "driver/mcpwm.h"
-#include "soc/mcpwm_periph.h"
-#include "driver/gpio.h"
-
-
-
-#define GPIO_PWM0A_OUT 25  //Set GPIO 15 as PWM0A
-#define GPIO_PWM0B_OUT 26   //Set GPIO 16 as PWM0B
-
-#define GPIO_PWM1A_OUT 32  
-#define GPIO_PWM1B_OUT 33  
-
-
-#define LOG_INFO_MSG_SIZE 200
-
-
-
-enum EWheelRotationState {STOPED = 0, FORWARD = 1, BACKWARD = -1, STOPING_FORWARD = 2, STOPING_BACKWARD = -2};
-
-
-
-void updateMotorState(mcpwm_unit_t mcpwm_num, 
-						mcpwm_timer_t timer_num, 
-						enum EWheelRotationState* cur_wheel_state, 
-						int *stoping_counter,
-						float factor);
-
-void updateStopingSubstate(enum EWheelRotationState* cur_wheel_state, int *stoping_counter);
-
-
-

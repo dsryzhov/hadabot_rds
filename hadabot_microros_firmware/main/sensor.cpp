@@ -1,50 +1,113 @@
-#include <rcl/rcl.h>
-#include <rcl/error_handling.h>
-#include <rclc/rclc.h>
-#include <rclc/executor.h>
-#include <std_msgs/msg/header.h>
-#include <std_msgs/msg/string.h>
-#include <std_msgs/msg/float32.h>
-#include <geometry_msgs/msg/twist.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <time.h>
+#include "sensor.h"
 
-#ifdef ESP_PLATFORM
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
-#endif
-
-#define STRING_BUFFER_LEN 50
-
-#define RCCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){printf("Failed status on line %d: %d. Aborting.\n",__LINE__,(int)temp_rc);vTaskDelete(NULL);}}
-#define RCSOFTCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){printf("Failed status on line %d: %d. Continuing.\n",__LINE__,(int)temp_rc);}}
-
-#include "esp_attr.h"
-
-#include "driver/mcpwm.h"
-#include "soc/mcpwm_periph.h"
-//#include "driver/pcnt.h"
-//#include "driver/periph_ctrl.h"
-#include "driver/gpio.h"
-#include "driver/timer.h"
 
 #define TIMER_DIVIDER         16  //  Hardware timer clock divider
-#define TIMER_SCALE           (TIMER_BASE_CLK / TIMER_DIVIDER)  // convert counter value to seconds
+
+static void IRAM_ATTR rotation_sensor_gpio_isr_handler(void* arg)
+{
+	RotationSensor* sensor = static_cast<RotationSensor*>(arg);
+	
+	portMUX_TYPE timerMux = sensor->getTimerMux();
+	
+	portENTER_CRITICAL_ISR(&timerMux);
+	
+
+    uint32_t gpio_num = (uint32_t) sensor->getSensorPIN();
+	xQueueHandle sensor_evt_queue = sensor->getSensorEvtQueue();
+	
+	
+	int sensor_level = sensor->getSensorLevel();
+	double last_time_sec = sensor->getLastMeasuredTime();
+	
+	int new_sensor_level = digitalRead(gpio_num);
+	
+//	if (new_sensor_level != sensor_level) {
+		
+
+		double cur_time_sec = timerReadSeconds(sensor->getHwTimer());
+		
+		double delta_time_sec = cur_time_sec - last_time_sec;
+		
+		if (delta_time_sec > 0.005 && sensor_level != new_sensor_level) {
+			xQueueSendFromISR(sensor_evt_queue, &delta_time_sec, NULL);		
+		}
+		
+		sensor->setLastMeasuredTime(cur_time_sec);
+		sensor->setSensorLevel(new_sensor_level);
+		
+		portEXIT_CRITICAL_ISR(&timerMux);
+		
+		
+//	}
+}
+
+static void sensor_radsp_calc_task(void* arg)
+{
+	
+	RotationSensor* sensor = static_cast<RotationSensor*>(arg);
+	
+	xQueueHandle sensor_evt_queue = sensor->getSensorEvtQueue();
+	Motor* pMotor = sensor->getMotor();
+	EMotorState motor_state;
+	float angular_velocity = 0;
+	
+    double delta_time_sec;
+    for(;;) {
+        if(xQueueReceive(sensor_evt_queue, &delta_time_sec, portMAX_DELAY)) {
+			if (delta_time_sec > 0.0) {
+				
+				int sensor_level = sensor->getSensorLevel();
+				
+				angular_velocity = 2*3.141596 / 20.0 / delta_time_sec;
+				
+				// текущий уровень сигнала сенсора - высокий, т.е. отверстие. Значит прошедший соответствует перегородке, которая шире отверстия.
+				if (sensor_level == 1) angular_velocity*=13.0/21.0;  
+				else angular_velocity *= 8.0/21.0;
+
+				int sign = 1;
+				motor_state = pMotor->getMotorState();
+				
+				if (motor_state < 0) sign = -1;
+			
+				if (motor_state != STOPED)
+					angular_velocity = angular_velocity * sign;	
+				else angular_velocity = 0;
+				
+				printf("delta_time : %f  radsp : %f\n", (float)delta_time_sec, (float)angular_velocity);				
+			} else angular_velocity = 0;
+			sensor->setAngularVelocity(angular_velocity);
+        }
+    }
+}
 
 
-#define GPIO_PWM0A_OUT 25  //Set GPIO 15 as PWM0A
-#define GPIO_PWM0B_OUT 26   //Set GPIO 16 as PWM0B
+RotationSensor::RotationSensor(char* _sensor_name, uint32_t _sensor_pin, uint8_t _timer_num, Motor* _pMotor) : 
+ sensor_name(_sensor_name), sensor_pin(_sensor_pin), timer_num(_timer_num), pMotor{_pMotor} {
+	 
+	angular_velocity = 0;
+	timerMux = portMUX_INITIALIZER_UNLOCKED;
+	pinMode(sensor_pin, INPUT_PULLUP);
 
-#define GPIO_PWM1A_OUT 32  
-#define GPIO_PWM1B_OUT 33  
+	last_measured_time = 0;	
+	sensor_level = digitalRead(sensor_pin);
+    timer = timerBegin(timer_num, TIMER_DIVIDER, true);	
+	
+    sensor_evt_queue = xQueueCreate(10, sizeof(double));
+    xTaskCreate(sensor_radsp_calc_task, sensor_name, 6144, this, 10, NULL);
+
+	attachInterruptArg(sensor_pin, rotation_sensor_gpio_isr_handler, this, CHANGE); 
+}
+
+RotationSensor::~RotationSensor() {
+	timerEnd(timer);
+}
+	
 
 
-#define LOG_INFO_MSG_SIZE 200
 
 
-
+	
+/*
 
 // ++++++++++++++++++++++++++ Измерение радиальной скорости
 
@@ -146,22 +209,22 @@ static void left_wheel_radsp_calc_task(void* arg)
 			
 			if (delta_time_sec > 0.0) {
 				
-				float koef = 2*3.141596 / 20.0 / delta_time_sec;
-				if (left_wheel_sensor_state == true) koef*=13.0/21.0;  // текущий уровень сигнала сенсора - высокий, т.е. отверстие. Значит прошедший соответствует перегородке, которая шире отверстия.
-				else koef *= 8.0/21.0;
+				float angular_velocity = 2*3.141596 / 20.0 / delta_time_sec;
+				if (left_wheel_sensor_state == true) angular_velocity*=13.0/21.0;  // текущий уровень сигнала сенсора - высокий, т.е. отверстие. Значит прошедший соответствует перегородке, которая шире отверстия.
+				else angular_velocity *= 8.0/21.0;
 
 
 				int sign = 1;
 				if (left_wheel_state < 0) sign = -1;
 			
 				if (left_wheel_state != STOPED)
-					koef = koef * sign;	
-				else koef = 0;
+					angular_velocity = angular_velocity * sign;	
+				else angular_velocity = 0;
 				
-				//if (koef < 20)
-					wheel_radps_left_msg.data = koef;
+				//if (angular_velocity < 20)
+					wheel_radps_left_msg.data = angular_velocity;
 				
-				//printf("delta_time : %f  radsp : %f\n", (float)delta_time_sec, (float)koef);				
+				//printf("delta_time : %f  radsp : %f\n", (float)delta_time_sec, (float)angular_velocity);				
 
 			} else wheel_radps_left_msg.data = 0;
 			
@@ -177,21 +240,21 @@ static void right_wheel_radsp_calc_task(void* arg)
         if(xQueueReceive(right_wheel_gpio_evt_queue, &delta_time_sec, portMAX_DELAY)) {
 			
 			if (delta_time_sec > 0.0) {
-				float koef = 2*3.141596 / 20.0 / delta_time_sec;
-				if (right_wheel_sensor_state == true) koef*=123.0/210.0;  // текущий уровень сигнала сенсора - высокий, т.е. отверстие. Значит прошедший соответствует перегородке, которая шире отверстия.
-				else koef *= 87.0/210.0;
+				float angular_velocity = 2*3.141596 / 20.0 / delta_time_sec;
+				if (right_wheel_sensor_state == true) angular_velocity*=123.0/210.0;  // текущий уровень сигнала сенсора - высокий, т.е. отверстие. Значит прошедший соответствует перегородке, которая шире отверстия.
+				else angular_velocity *= 87.0/210.0;
 
-				//printf("delta_time : %f  radsp : %f\n", (float)delta_time_sec, (float)koef);
+				//printf("delta_time : %f  radsp : %f\n", (float)delta_time_sec, (float)angular_velocity);
 				
 				int sign = 1;
 				if (right_wheel_state < 0) sign = -1;
 				
 				if (right_wheel_state != STOPED)
-				   koef = koef * sign;	
+				   angular_velocity = angular_velocity * sign;	
 			
 
-				//if (koef < 20)
-					wheel_radps_right_msg.data = koef;
+				//if (angular_velocity < 20)
+					wheel_radps_right_msg.data = angular_velocity;
 
 			} else 
 				wheel_radps_right_msg.data = 0;
@@ -265,6 +328,6 @@ void wheel_sensors_init() {
 }
 
 
-
+*/
 
 

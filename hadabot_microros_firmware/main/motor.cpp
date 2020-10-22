@@ -1,45 +1,75 @@
 #include "motor.h"
+#include "Arduino.h"
 
-#include <rcl/rcl.h>
-#include <rcl/error_handling.h>
-#include <rclc/rclc.h>
-#include <rclc/executor.h>
-#include <std_msgs/msg/header.h>
-#include <std_msgs/msg/string.h>
-#include <std_msgs/msg/float32.h>
-#include <geometry_msgs/msg/twist.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <time.h>
+#define LEDC_TIMER_13_BIT  13
 
-#ifdef ESP_PLATFORM
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
-#endif
+//+++++++++++ Motor ++++=+++++++++++++++++++++++
 
-#define STRING_BUFFER_LEN 50
 
-#define RCCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){printf("Failed status on line %d: %d. Aborting.\n",__LINE__,(int)temp_rc);vTaskDelete(NULL);}}
-#define RCSOFTCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){printf("Failed status on line %d: %d. Continuing.\n",__LINE__,(int)temp_rc);}}
+Motor::Motor(uint8_t _forward_channel, uint8_t _backward_channel, uint8_t forward_pin_num, uint8_t backward_pin_num, double freq) :
+forward_channel{_forward_channel}, backward_channel{_backward_channel}, motor_state{STOPED}
+{
+	//double ledcSetup(uint8_t chan, double freq, uint8_t bit_num)	
+	ledcSetup(forward_channel, freq, LEDC_TIMER_13_BIT);
+	ledcAttachPin(forward_pin_num, forward_channel);
+	
+	ledcSetup(backward_channel, freq, LEDC_TIMER_13_BIT);
+	ledcAttachPin(backward_pin_num, backward_channel);
+  
+}
 
-#include "esp_attr.h"
+Motor::~Motor() {
+}
 
-#include "driver/mcpwm.h"
-#include "soc/mcpwm_periph.h"
-//#include "driver/pcnt.h"
-//#include "driver/periph_ctrl.h"
-#include "driver/gpio.h"
+// Arduino like analogWrite
+// value has to be between 0 and valueMax
+void Motor::ledcAnalogWrite(uint8_t channel, float duty_ratio) {
+  // calculate duty, 8191 from 2 ^ 13 - 1
+  uint32_t duty = 8191*duty_ratio;
 
-enum EWheelRotationState left_wheel_state;
-enum EWheelRotationState right_wheel_state;
+  // write duty to LEDC
+  ledcWrite(channel, duty);
+}
+  
+void Motor::forward(float duty_ratio) {
+	ledcWrite(backward_channel, 0);			
+	ledcAnalogWrite(forward_channel, duty_ratio);	
+	motor_state = FORWARD;
+}
+
+void Motor::backward(float duty_ratio) {
+	ledcWrite(forward_channel, 0);	
+	ledcAnalogWrite(backward_channel, duty_ratio);		
+	motor_state = BACKWARD;
+}
+
+void Motor::stop() {
+	ledcWrite(backward_channel, 0);				
+	ledcWrite(forward_channel, 0);	
+	motor_state = STOPED;
+}
+
+void Motor::updateRotation(float factor) {
+	if (factor > 0) {
+		forward(factor);
+	} else 
+		if (factor < 0) {
+			backward((-1.0)*factor);
+		} else {
+			stop();
+		}	
+}
+
+
+
+/*
+
+enum EMotorState left_wheel_state;
+enum EMotorState right_wheel_state;
 
 
 int left_stoping_counter = 0;
 int right_stoping_counter = 0;
-
-//+++++++++++ Motor ++++=+++++++++++++++++++++++
-
 
 static void mcpwm_gpio_initialize(void)
 {
@@ -53,9 +83,6 @@ static void mcpwm_gpio_initialize(void)
 }
 
 
-/**
- * @brief Configure MCPWM module for brushed dc motor
- */
 static void mcpwm_brushed_motor_control_init(void *arg)
 {
     //1. mcpwm gpio initialization
@@ -78,9 +105,6 @@ static void mcpwm_brushed_motor_control_init(void *arg)
 }
 
 
-/**
- * @brief motor moves in forward direction, with duty cycle = duty %
- */
 static void brushed_motor_forward(mcpwm_unit_t mcpwm_num, mcpwm_timer_t timer_num , float duty_cycle)
 {
     mcpwm_set_signal_low(mcpwm_num, timer_num, MCPWM_OPR_B);
@@ -88,9 +112,7 @@ static void brushed_motor_forward(mcpwm_unit_t mcpwm_num, mcpwm_timer_t timer_nu
     mcpwm_set_duty_type(mcpwm_num, timer_num, MCPWM_OPR_A, MCPWM_DUTY_MODE_0); //call this each time, if operator was previously in low/high state
 }
 
-/**
- * @brief motor moves in backward direction, with duty cycle = duty %
- */
+
 static void brushed_motor_backward(mcpwm_unit_t mcpwm_num, mcpwm_timer_t timer_num , float duty_cycle)
 {
     mcpwm_set_signal_low(mcpwm_num, timer_num, MCPWM_OPR_A);
@@ -98,9 +120,7 @@ static void brushed_motor_backward(mcpwm_unit_t mcpwm_num, mcpwm_timer_t timer_n
     mcpwm_set_duty_type(mcpwm_num, timer_num, MCPWM_OPR_B, MCPWM_DUTY_MODE_0);  //call this each time, if operator was previously in low/high state
 }
 
-/**
- * @brief motor stop
- */
+
 static void brushed_motor_stop(mcpwm_unit_t mcpwm_num, mcpwm_timer_t timer_num)
 {
     mcpwm_set_signal_low(mcpwm_num, timer_num, MCPWM_OPR_A);
@@ -124,10 +144,10 @@ void updateMotorRotation(mcpwm_unit_t mcpwm_num, mcpwm_timer_t timer_num, float 
 
 void updateMotorState(mcpwm_unit_t mcpwm_num, 
 						mcpwm_timer_t timer_num, 
-						enum EWheelRotationState* cur_wheel_state, 
+						enum EMotorState* cur_wheel_state, 
 						int *stoping_counter,
 						float factor) {
-		enum EWheelRotationState new_wheel_state;
+		enum EMotorState new_wheel_state;
 		
 		float duty = factor * 100.0;
 		if (duty > 100.0) duty = 100.0;
@@ -151,10 +171,10 @@ void updateMotorState(mcpwm_unit_t mcpwm_num,
 		*cur_wheel_state = new_wheel_state;
 }
 
-void updateStopingSubstate(enum EWheelRotationState* cur_wheel_state, int *stoping_counter) {
+void updateStopingSubstate(enum EMotorState* cur_wheel_state, int *stoping_counter) {
 	(*stoping_counter)--;
 	if ((*stoping_counter) == 0) 
 		(*cur_wheel_state) = STOPED;
 }
-
+*/
 
