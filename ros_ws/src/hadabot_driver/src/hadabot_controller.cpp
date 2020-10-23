@@ -20,7 +20,7 @@ typedef enum {
 } HBSide;
 
 #define UPDATE_DT 15ms
-#define PUBLISH_DT 15ms
+#define PUBLISH_DT 500ms
 
 #define PI 3.14159265
 
@@ -128,8 +128,8 @@ private:
     pose_->header.stamp = current_time;
     pose_->header.frame_id = "Fixed Frame";
 
-   std::cout <<  "x: " << pose_->pose.pose.position.x <<  "   y: " << pose_->pose.pose.position.y << "  theta : " <<  theta_rad << "   v : " << pose_->twist.twist.linear.x  << "   w: " <<  pose_->twist.twist.angular.z << std::endl; 
-   std::cout.flush();
+//   std::cout <<  "x: " << pose_->pose.pose.position.x <<  "   y: " << pose_->pose.pose.position.y << "  theta : " <<  theta_rad << "   v : " << pose_->twist.twist.linear.x  << "   w: " <<  pose_->twist.twist.angular.z << std::endl; 
+//   std::cout.flush();
 
   }
 
@@ -138,8 +138,8 @@ private:
   {
     odometry_pub_->publish(*pose_);
 
-//   std::cout <<  "x: " << pose_->pose.pose.position.x <<  "   y: " << pose_->pose.pose.position.y << "   v : " << pose_->twist.twist.linear.x  << "   w: " <<  pose_->twist.twist.angular.z << std::endl; 
-//   std::cout.flush();
+   std::cout <<  "x: " << pose_->pose.pose.position.x <<  "   y: " << pose_->pose.pose.position.y << "   v : " << pose_->twist.twist.linear.x  << "   w: " <<  pose_->twist.twist.angular.z << std::endl; 
+   std::cout.flush();
   }
 
   /***************************************************************************/
@@ -149,8 +149,8 @@ private:
 
 
     if (v != 0.0)  {
-          if (v > 0) v = 0.33;
-          else v = -0.33;
+          if (v > 0) v = 1.0;
+          else v = -1.0;
     }
 
 	
