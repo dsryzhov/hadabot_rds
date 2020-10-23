@@ -83,9 +83,7 @@ private:
   void update_odometry() 
   {
     // Get the time delta since last update
-     auto cur_time_sec = this->now().seconds();
-
-
+    auto cur_time_sec = this->now().seconds();
     auto current_time = this->now(); 
 
     auto dt_ms = UPDATE_DT;
@@ -105,26 +103,11 @@ private:
     double d_center_m = (d_right_m + d_left_m) / 2.0;
     double phi_rad = (d_right_m - d_left_m) / wheelbase_m_;
 
-//    std::cout << d_left_m << "        " << d_right_m  << "  d_c  " << d_center_m << "   phi_rad   "  << phi_rad  << std::endl;
-//    std::cout.flush();
-
     tf2::Quaternion q0(pose_->pose.pose.orientation.x, pose_->pose.pose.orientation.y, pose_->pose.pose.orientation.z, pose_->pose.pose.orientation.w);
-
-
     tf2::Matrix3x3 m(q0);
     double roll, pitch, yaw;
     m.getRPY(roll, pitch, yaw);
-    
-
-
-
-//    auto theta_rad = pose_->pose.pose.orientation.z;
-//    auto theta_rad = atan2(q0.getW(), q0.getY());
     double theta_rad = yaw;
-    
-//    std::cout << q0.getX() << "        " << q0.getY() << "      " << q0.getZ() << "     " << q0.getW() << std::endl;
-//    std::cout.flush();
-
 
     double x_m_dt = d_center_m * std::cos(theta_rad);
     double y_m_dt = d_center_m * std::sin(theta_rad);
@@ -147,10 +130,6 @@ private:
 
    std::cout <<  "x: " << pose_->pose.pose.position.x <<  "   y: " << pose_->pose.pose.position.y << "  theta : " <<  theta_rad << "   v : " << pose_->twist.twist.linear.x  << "   w: " <<  pose_->twist.twist.angular.z << std::endl; 
    std::cout.flush();
-
-//    std::cout << "    theta : " <<  theta_rad << "   phi_rad : " << phi_rad << "   dx : " << x_m_dt << "  dy : " << y_m_dt << std::endl;
-//    std::cout.flush();
-
 
   }
 

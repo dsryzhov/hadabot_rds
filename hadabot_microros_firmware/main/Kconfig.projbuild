@@ -1,0 +1,43 @@
+menu "Hadabot Firmware Configuration"
+
+config HADABOT_LEFT_MOTOR_FORWARD_PIN
+    int "Pin number for left motor forward PWD signal"
+    default 25
+
+config HADABOT_LEFT_MOTOR_BACKWARD_PIN
+    int "Pin number for left motor backward PWD signal"
+    default 26
+	
+config HADABOT_RIGHT_MOTOR_FORWARD_PIN
+    int "Pin number for right motor forward PWD signal"
+    default 32
+
+config HADABOT_RIGHT_MOTOR_BACKWARD_PIN
+    int "Pin number for right motor backward PWD signal"
+    default 33
+
+config HADABOT_LEFT_WHEEL_ROT_SENSOR_PIN
+    int "Pin number for left wheel rotation sensor signal"
+    default 4
+
+config HADABOT_RIGHT_WHEEL_ROT_SENSOR_PIN
+    int "Pin number for right wheel rotation sensor signal"
+    default 2
+	
+config HADABOT_ROT_SENSOR_CHANGE_MODE
+	bool "Use front change mode for rotation sensors"
+	default y
+
+config HADABOT_LEFT_ROT_SENSOR_HOLE_WIDTH_RATIO
+	int "Left rotation sensor hole width ratio"
+	default 50
+
+config HADABOT_RIGHT_ROT_SENSOR_HOLE_WIDTH_RATIO
+	int "Right rotation sensor hole width ratio"
+	default 50
+
+config HADABOT_WHEELS_RADPS_MSG_PUBLISH_PERIOD
+    int "Period (in ms) for publishing measurements of wheels angular velocities"
+    default 15
+	
+endmenu

@@ -1,12 +1,16 @@
+#ifndef __ROTSENSOR_H
+#define __ROTSENSOR_H
+
 #include "motor.h"
 #include "Arduino.h"
 
 
-void wheel_sensors_init();
+enum ERotSensorMode {FRONT_CHANGE, FRONT_HIGH};
+
 
 class RotationSensor {
 public:
-	RotationSensor(char* _sensor_name, uint32_t _sensor_pin, uint8_t _timer_num, Motor* _pMotor);
+	RotationSensor(char* _sensor_name, uint32_t _sensor_pin, uint8_t _timer_num, Motor* _pMotor, int _disk_holes_count = 20, ERotSensorMode _mode = FRONT_CHANGE, double _hole_width_ratio = 0.5);
 	~RotationSensor();
 	
 	inline float getAngularVelocity() {return angular_velocity;};
@@ -25,6 +29,9 @@ public:
 	inline Motor* getMotor() {return pMotor;}
 	
 	inline portMUX_TYPE& getTimerMux() {return timerMux;}
+	inline ERotSensorMode getSensorMode() {return mode;}
+	inline int getDiskHolesCount() {return disk_holes_count;}
+	inline double getHoleWidthRatio() {return hole_width_ratio;}
 	
 protected:
 	char* sensor_name;
@@ -32,6 +39,10 @@ protected:
 	uint8_t timer_num;
 	hw_timer_t * timer = NULL;
 	Motor* pMotor;
+	
+	int disk_holes_count;
+	ERotSensorMode mode;
+	double hole_width_ratio; // in percent
 	
 	
 	int sensor_level;
@@ -43,5 +54,4 @@ protected:
 	xQueueHandle sensor_evt_queue = NULL;
 };
 
-
-
+#endif 

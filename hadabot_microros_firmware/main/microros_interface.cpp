@@ -1,3 +1,6 @@
+#include "sdkconfig.h"
+
+#include "uxr/client/config.h"
 #include <rcl/rcl.h>
 #include <rcl/error_handling.h>
 #include <rclc/rclc.h>
@@ -20,48 +23,16 @@
 #define RCCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){printf("Failed status on line %d: %d. Aborting.\n",__LINE__,(int)temp_rc);vTaskDelete(NULL);}}
 #define RCSOFTCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){printf("Failed status on line %d: %d. Continuing.\n",__LINE__,(int)temp_rc);}}
 
-#include "esp_attr.h"
+//#include "esp_attr.h"
+//#include "driver/gpio.h"
+//#include "driver/timer.h"
 
 
-#include "driver/gpio.h"
-#include "driver/timer.h"
+#include "hadabot_hw.h"
+//#include "rotsensor.h"
+//#include "motor.h"
 
-
-#include "sensor.h"
-#include "motor.h"
-
-
-// use 5000 Hz as a motor contorl base frequency
-#define MOTOR_CONTROL_BASE_FREQ     5000
-
-#define LEFT_MOTOR_FORWARD_CHANNEL 0
-#define LEFT_MOTOR_BACKWARD_CHANNEL 2
-#define LEFT_MOTOR_FORWARD_PIN 25  //Set GPIO 15 as PWM0A
-#define LEFT_MOTOR_BACKWARD_PIN 26   //Set GPIO 16 as PWM0B
-
-#define RIGHT_MOTOR_FORWARD_CHANNEL 1
-#define RIGHT_MOTOR_BACKWARD_CHANNEL 3
-#define RIGHT_MOTOR_FORWARD_PIN 32  
-#define RIGHT_MOTOR_BACKWARD_PIN 33  
-
-Motor leftMotor(LEFT_MOTOR_FORWARD_CHANNEL, LEFT_MOTOR_BACKWARD_CHANNEL, LEFT_MOTOR_FORWARD_PIN, LEFT_MOTOR_BACKWARD_PIN, MOTOR_CONTROL_BASE_FREQ);
-Motor rightMotor(RIGHT_MOTOR_FORWARD_CHANNEL, RIGHT_MOTOR_BACKWARD_CHANNEL, RIGHT_MOTOR_FORWARD_PIN, RIGHT_MOTOR_BACKWARD_PIN, MOTOR_CONTROL_BASE_FREQ);
-
-
-
-// ++++++++++++++++++++++++++ Измерение радиальной скорости
-
-#define LW_SENSOR_PIN     4
-#define RW_SENSOR_PIN     2
-#define LEFT_ROTATION_SENSOR_TIMER_NUM   0
-#define RIGHT_ROTATION_SENSOR_TIMER_NUM   1
-
-#define GPIO_INPUT_PIN_SEL  ((1ULL<<LW_SENSOR_GPIO) | (1ULL<<RW_SENSOR_GPIO))
-#define ESP_INTR_FLAG_DEFAULT 0
-
-//char* _sensor_name, uint32_t _sensor_gpio_num, uint8_t _timer_num, Motor* _pMotor
-RotationSensor leftWheelRotationSensor("LeftMotorRotationSensor", LW_SENSOR_PIN, LEFT_ROTATION_SENSOR_TIMER_NUM, &leftMotor);
-RotationSensor rightWheelRotationSensor("RightMotorRotationSensor", RW_SENSOR_PIN, RIGHT_ROTATION_SENSOR_TIMER_NUM, &rightMotor);
+HadabotHW* pHadabotHW;
 
 
 #define LOG_INFO_MSG_SIZE 200
@@ -79,6 +50,7 @@ std_msgs__msg__Float32 wheel_radps_left_msg;
 std_msgs__msg__Float32 wheel_radps_right_msg;
 
 
+
 void log_info_timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 {
 	UNUSED(last_call_time);
@@ -87,38 +59,33 @@ void log_info_timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 		// Fill the message timestamp
 		struct timespec ts;
 		clock_gettime(CLOCK_REALTIME, &ts);
-		//sprintf(log_info_string, "Hadabot heartbeat %d_%d", ts.tv_sec, ts.tv_nsec);
-
-		//sprintf(log_info_msg.data.data, "Hadabot heartbeat %d_%d", ts.tv_sec, ts.tv_nsec);
-		sprintf(log_info_msg.data.data, "Hadabot heartbeat");
+		sprintf(log_info_msg.data.data, "Hadabot heartbeat %ld", ts.tv_sec);
+		//sprintf(log_info_msg.data.data, "Hadabot heartbeat");
 		log_info_msg.data.size = strlen(log_info_msg.data.data);
-		
-		
-		// Reset the pong count and publish the ping message
 
 		rcl_publish(&log_info_publisher, (const void*)&log_info_msg, NULL);
-		printf("Sent Hadabot heartbeat\n");
+		printf(log_info_msg.data.data);
+		printf("\n");
 	}
 }
 
-
-void left_motor_callback(const void * msgin)
+void wheel_power_left_callback(const void * msgin)
 {
 	const std_msgs__msg__Float32 * msg = (const std_msgs__msg__Float32 *)msgin;
 	printf("Received message /hadabot/wheel_power_left.");
 	if (msg != NULL) {
 		printf("Data: %f\n", msg->data);
-		leftMotor.updateRotation(msg->data);
+		pHadabotHW->getLeftMotor()->updateRotation(msg->data);
 	}
 }
 
-void right_motor_callback(const void * msgin)
+void wheel_power_right_callback(const void * msgin)
 {
 	const std_msgs__msg__Float32 * msg = (const std_msgs__msg__Float32 *)msgin;
 	printf("Received message /hadabot/wheel_power_right.");
 	if (msg != NULL) {
 		printf("Data: %f\n", msg->data);
-		rightMotor.updateRotation(msg->data);
+		pHadabotHW->getRightMotor()->updateRotation(msg->data);
 	}
 }
 
@@ -128,8 +95,8 @@ void wheel_radsp_timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
 	
 	if (timer != NULL) {
 		
-		wheel_radps_left_msg.data = leftWheelRotationSensor.getAngularVelocity();
-		wheel_radps_right_msg.data = rightWheelRotationSensor.getAngularVelocity();
+		wheel_radps_left_msg.data = pHadabotHW->getLeftWheelRotationSensor()->getAngularVelocity();
+		wheel_radps_right_msg.data = pHadabotHW->getRightWheelRotationSensor()->getAngularVelocity();
 		
 		if (wheel_radps_left_msg.data != 0 || wheel_radps_right_msg.data != 0) {
 			
@@ -196,8 +163,9 @@ void wheel_radsp_timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 
 extern "C"  void appMain(void * arg)
 {
-
-//	wheel_sensors_init();
+	log_info_msg.data.data = (char * ) malloc(LOG_INFO_MSG_SIZE * sizeof(char));
+	log_info_msg.data.size = 0;
+	log_info_msg.data.capacity = LOG_INFO_MSG_SIZE;
 	
   	rcl_allocator_t allocator = rcl_get_default_allocator();
 	rclc_support_t support;
@@ -218,7 +186,7 @@ extern "C"  void appMain(void * arg)
 
 	
 	rcl_timer_t wheel_radsp_timer = rcl_get_zero_initialized_timer();
-	RCCHECK(rclc_timer_init_default(&wheel_radsp_timer, &support, RCL_MS_TO_NS(15), wheel_radsp_timer_callback));
+	RCCHECK(rclc_timer_init_default(&wheel_radsp_timer, &support, RCL_MS_TO_NS(CONFIG_HADABOT_WHEELS_RADPS_MSG_PUBLISH_PERIOD), wheel_radsp_timer_callback));
 	
 	
 	RCCHECK(rclc_publisher_init_default(&wheel_radps_left_publisher, &node,
@@ -250,18 +218,14 @@ extern "C"  void appMain(void * arg)
 	rclc_executor_t executor = rclc_executor_get_zero_initialized_executor();
 	RCCHECK(rclc_executor_init(&executor, &support.context, 4, &allocator));
 
-	unsigned int rcl_wait_timeout = 100;   // in ms
+	unsigned int rcl_wait_timeout = 100;   // timeout for waiting for new data from subscribed topics
 	RCCHECK(rclc_executor_set_timeout(&executor, RCL_MS_TO_NS(rcl_wait_timeout)));
 	
 	RCCHECK(rclc_executor_add_timer(&executor, &wheel_radsp_timer));		
-	RCCHECK(rclc_executor_add_subscription(&executor, &subscriber_wheel_power_left, &wheel_power_left_msg, &left_motor_callback, ON_NEW_DATA));
-	RCCHECK(rclc_executor_add_subscription(&executor, &subscriber_wheel_power_right, &wheel_power_right_msg, &right_motor_callback, ON_NEW_DATA));
-	
+	RCCHECK(rclc_executor_add_subscription(&executor, &subscriber_wheel_power_left, &wheel_power_left_msg, &wheel_power_left_callback, ON_NEW_DATA));
+	RCCHECK(rclc_executor_add_subscription(&executor, &subscriber_wheel_power_right, &wheel_power_right_msg, &wheel_power_right_callback, ON_NEW_DATA));
 	RCCHECK(rclc_executor_add_timer(&executor, &log_info_timer));	
 
-	log_info_msg.data.data = (char * ) malloc(LOG_INFO_MSG_SIZE * sizeof(char));
-	log_info_msg.data.size = 0;
-	log_info_msg.data.capacity = LOG_INFO_MSG_SIZE;
 	
 	rclc_executor_spin(&executor);
 
@@ -275,4 +239,10 @@ extern "C"  void appMain(void * arg)
 
 	RCCHECK(rcl_node_fini(&node));
 	vTaskDelete(NULL);
+}
+
+extern "C"  void microros_interface_init(HadabotHW* _pHadabotHW) {
+	pHadabotHW = _pHadabotHW;
+    // start microROS task
+    xTaskCreate(appMain, "uros_task", CONFIG_MICRO_ROS_APP_STACK, NULL, 5, NULL);	
 }

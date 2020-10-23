@@ -1,10 +1,6 @@
 #include "uxr/client/config.h"
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-
-#include <driver/uart.h>
-#include <driver/gpio.h>
+/*
 
 #include <string.h>
 #include "freertos/event_groups.h"
@@ -13,19 +9,26 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_system.h"
-#include "nvs_flash.h"
 
 #include "lwip/err.h"
 #include "lwip/sys.h"
+
+*/
+
+#include "nvs_flash.h"
+
 #include "WiFi.h"
 
-extern "C" void appMain(void *argument);
+#include "hadabot_hw.h"
+
 
 #define ESP_WIFI_SSID      CONFIG_ESP_WIFI_SSID
 #define ESP_WIFI_PASS      CONFIG_ESP_WIFI_PASSWORD
 #define ESP_MAXIMUM_RETRY  CONFIG_ESP_MAXIMUM_RETRY
 
+HadabotHW hadabot_hw;
 
+extern "C" void microros_interface_init(HadabotHW* _pHadabotHW);
 
 void wifi_init_sta()
 {
@@ -65,6 +68,5 @@ extern "C" void app_main(void)
     wifi_init_sta();
 #endif  // UCLIENT_PROFILE_UDP
 
-    // start microROS task
-    xTaskCreate(appMain, "uros_task", CONFIG_MICRO_ROS_APP_STACK, NULL, 5, NULL);
+	microros_interface_init(&hadabot_hw);
 }
