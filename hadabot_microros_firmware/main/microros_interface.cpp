@@ -49,6 +49,8 @@ rcl_publisher_t wheel_radps_right_publisher;
 std_msgs__msg__Float32 wheel_radps_left_msg;
 std_msgs__msg__Float32 wheel_radps_right_msg;
 
+rcl_publisher_t distance_publisher;
+std_msgs__msg__Float32 distance_msg;
 
 
 void log_info_timer_callback(rcl_timer_t * timer, int64_t last_call_time)
@@ -91,75 +93,30 @@ void wheel_power_right_callback(const void * msgin)
 
 void wheel_radsp_timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
 	UNUSED(last_call_time);
-
-	
 	if (timer != NULL) {
-		
 		wheel_radps_left_msg.data = pHadabotHW->getLeftWheelRotationSensor()->getAngularVelocity();
 		wheel_radps_right_msg.data = pHadabotHW->getRightWheelRotationSensor()->getAngularVelocity();
-		
 		if (wheel_radps_left_msg.data != 0 || wheel_radps_right_msg.data != 0) {
-			
-			
 			rcl_publish(&wheel_radps_left_publisher, (const void*)&wheel_radps_left_msg, NULL);	
-			
 			rcl_publish(&wheel_radps_right_publisher, (const void*)&wheel_radps_right_msg, NULL);			
 		}
-		
 	}		
 }
 
-
-/*
-
-float wheel_radps_left_prev = 0;
-float wheel_radps_right_prev = 0;
-
-// Не правильно отслеживать последнее совпадение здесь
-
-void wheel_radsp_timer_callback(rcl_timer_t * timer, int64_t last_call_time)
-{
+void distance_timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
 	UNUSED(last_call_time);
-
 	
 	if (timer != NULL) {
-		if (left_wheel_state != STOPED) {
-			
-			if (left_wheel_state == STOPING_FORWARD || left_wheel_state == STOPING_BACKWARD) {
-				updateStopingSubstate(&left_wheel_state, &left_stoping_counter);
-			
-				//if (wheel_radps_left_msg.data == wheel_radps_left_prev && abs(wheel_radps_left_msg.data) < 6) {
-				if (abs(wheel_radps_left_msg.data) < 6) {
-					wheel_radps_left_msg.data = 0;
-					left_stoping_counter = 0;
-					left_wheel_state = STOPED;
-				}
-			}
-			
-			rcl_publish(&wheel_radps_left_publisher, (const void*)&wheel_radps_left_msg, NULL);		
-			wheel_radps_left_prev = wheel_radps_left_msg.data;
+		
+		distance_msg.data = pHadabotHW->getHCSR04()->getDistanceInMillimeters();
+		
+		if (distance_msg.data != -1 ) {
 
-		}			
-		if (right_wheel_state != STOPED) {
-			if (right_wheel_state == STOPING_FORWARD || right_wheel_state == STOPING_BACKWARD) {
-				updateStopingSubstate(&right_wheel_state, &right_stoping_counter);
-				
-				//if (wheel_radps_right_prev == wheel_radps_right_msg.data && abs(wheel_radps_right_msg.data) < 6) {
-				if (abs(wheel_radps_right_msg.data) < 6) {
-					wheel_radps_right_msg.data = 0;
-					right_stoping_counter = 0;
-					right_wheel_state = STOPED;
-				}
-
-			}
-				
-			rcl_publish(&wheel_radps_right_publisher, (const void*)&wheel_radps_right_msg, NULL);
-			wheel_radps_right_prev = wheel_radps_right_msg.data;
-		}			
-
-	}
+			rcl_publish(&distance_publisher, (const void*)&distance_msg, NULL);	
+		}
+	}		
 }
-*/
+
 
 extern "C"  void appMain(void * arg)
 {
@@ -187,6 +144,9 @@ extern "C"  void appMain(void * arg)
 	
 	rcl_timer_t wheel_radsp_timer = rcl_get_zero_initialized_timer();
 	RCCHECK(rclc_timer_init_default(&wheel_radsp_timer, &support, RCL_MS_TO_NS(CONFIG_HADABOT_WHEELS_RADPS_MSG_PUBLISH_PERIOD), wheel_radsp_timer_callback));
+
+	rcl_timer_t distance_timer = rcl_get_zero_initialized_timer();
+	RCCHECK(rclc_timer_init_default(&distance_timer, &support, RCL_MS_TO_NS(60), distance_timer_callback));
 	
 	
 	RCCHECK(rclc_publisher_init_default(&wheel_radps_left_publisher, &node,
@@ -194,7 +154,10 @@ extern "C"  void appMain(void * arg)
 
 	RCCHECK(rclc_publisher_init_default(&wheel_radps_right_publisher, &node,
 		ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32), "hadabot/wheel_radps_right"));
-		
+
+	RCCHECK(rclc_publisher_init_default(&distance_publisher, &node,
+		ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32), "hadabot/distance_forward"));
+
 		
 	// create subscriber for wheel power left message
 	
@@ -216,14 +179,15 @@ extern "C"  void appMain(void * arg)
 
 	// create executor
 	rclc_executor_t executor = rclc_executor_get_zero_initialized_executor();
-	RCCHECK(rclc_executor_init(&executor, &support.context, 4, &allocator));
+	RCCHECK(rclc_executor_init(&executor, &support.context, 5, &allocator));
 
 	unsigned int rcl_wait_timeout = 100;   // timeout for waiting for new data from subscribed topics
 	RCCHECK(rclc_executor_set_timeout(&executor, RCL_MS_TO_NS(rcl_wait_timeout)));
-	
-	RCCHECK(rclc_executor_add_timer(&executor, &wheel_radsp_timer));		
+
 	RCCHECK(rclc_executor_add_subscription(&executor, &subscriber_wheel_power_left, &wheel_power_left_msg, &wheel_power_left_callback, ON_NEW_DATA));
 	RCCHECK(rclc_executor_add_subscription(&executor, &subscriber_wheel_power_right, &wheel_power_right_msg, &wheel_power_right_callback, ON_NEW_DATA));
+	RCCHECK(rclc_executor_add_timer(&executor, &wheel_radsp_timer));		
+	RCCHECK(rclc_executor_add_timer(&executor, &distance_timer));
 	RCCHECK(rclc_executor_add_timer(&executor, &log_info_timer));	
 
 	
@@ -233,6 +197,7 @@ extern "C"  void appMain(void * arg)
 	
 	RCCHECK(rcl_publisher_fini(&wheel_radps_left_publisher, &node));
 	RCCHECK(rcl_publisher_fini(&wheel_radps_right_publisher, &node));
+	RCCHECK(rcl_publisher_fini(&distance_publisher, &node));
 		
 	RCCHECK(rcl_subscription_fini(&subscriber_wheel_power_left, &node));
 	RCCHECK(rcl_subscription_fini(&subscriber_wheel_power_right, &node));

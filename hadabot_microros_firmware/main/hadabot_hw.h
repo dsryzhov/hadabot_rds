@@ -3,6 +3,7 @@
 
 #include "motor.h"
 #include "rotsensor.h"
+#include "hcsr04.h"
 
 
 
@@ -17,13 +18,14 @@ public:
 	inline Motor* getRightMotor() {return &rightMotor; }
 	inline RotationSensor* getLeftWheelRotationSensor() {return &leftWheelRotationSensor;}	
 	inline RotationSensor* getRightWheelRotationSensor() {return &rightWheelRotationSensor;}	
+	inline HCSR04* getHCSR04() {return &hcsr04;}
 	
 protected:
 	Motor leftMotor;
 	Motor rightMotor;
 	RotationSensor leftWheelRotationSensor;
 	RotationSensor rightWheelRotationSensor;
-	
+	HCSR04 hcsr04;
 };
 
 #endif
