@@ -91,16 +91,14 @@ void wheel_power_right_callback(const void * msgin)
 	}
 }
 
-void wheel_radsp_timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
-	UNUSED(last_call_time);
-	if (timer != NULL) {
-		wheel_radps_left_msg.data = pHadabotHW->getLeftWheelRotationSensor()->getAngularVelocity();
-		wheel_radps_right_msg.data = pHadabotHW->getRightWheelRotationSensor()->getAngularVelocity();
-		if (wheel_radps_left_msg.data != 0 || wheel_radps_right_msg.data != 0) {
-			rcl_publish(&wheel_radps_left_publisher, (const void*)&wheel_radps_left_msg, NULL);	
-			rcl_publish(&wheel_radps_right_publisher, (const void*)&wheel_radps_right_msg, NULL);			
-		}
-	}		
+void wheel_radsp_left_callback(float angular_velocity) {
+		wheel_radps_left_msg.data = angular_velocity;
+		rcl_publish(&wheel_radps_left_publisher, (const void*)&wheel_radps_left_msg, NULL);	
+}
+
+void wheel_radsp_right_callback(float angular_velocity) {
+		wheel_radps_right_msg.data = angular_velocity;
+		rcl_publish(&wheel_radps_right_publisher, (const void*)&wheel_radps_right_msg, NULL);			
 }
 
 void distance_measured_callback(int distance) {
@@ -135,12 +133,6 @@ extern "C"  void appMain(void * arg)
 	RCCHECK(rclc_timer_init_default(&log_info_timer, &support, RCL_MS_TO_NS(5000), log_info_timer_callback));
 
 	
-	rcl_timer_t wheel_radsp_timer = rcl_get_zero_initialized_timer();
-	RCCHECK(rclc_timer_init_default(&wheel_radsp_timer, &support, RCL_MS_TO_NS(CONFIG_HADABOT_WHEELS_RADPS_MSG_PUBLISH_PERIOD), wheel_radsp_timer_callback));
-
-	
-	pHadabotHW->getHCSR04()->setDistanceMeasuredCallback(&distance_measured_callback);
-
 	RCCHECK(rclc_publisher_init_default(&wheel_radps_left_publisher, &node,
 		ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32), "hadabot/wheel_radps_left"));
 
@@ -171,17 +163,19 @@ extern "C"  void appMain(void * arg)
 
 	// create executor
 	rclc_executor_t executor = rclc_executor_get_zero_initialized_executor();
-	RCCHECK(rclc_executor_init(&executor, &support.context, 5, &allocator));
+	RCCHECK(rclc_executor_init(&executor, &support.context, 3, &allocator));
 
 	unsigned int rcl_wait_timeout = 100;   // timeout for waiting for new data from subscribed topics
 	RCCHECK(rclc_executor_set_timeout(&executor, RCL_MS_TO_NS(rcl_wait_timeout)));
 
 	RCCHECK(rclc_executor_add_subscription(&executor, &subscriber_wheel_power_left, &wheel_power_left_msg, &wheel_power_left_callback, ON_NEW_DATA));
 	RCCHECK(rclc_executor_add_subscription(&executor, &subscriber_wheel_power_right, &wheel_power_right_msg, &wheel_power_right_callback, ON_NEW_DATA));
-	RCCHECK(rclc_executor_add_timer(&executor, &wheel_radsp_timer));		
 	RCCHECK(rclc_executor_add_timer(&executor, &log_info_timer));	
 
-	
+	pHadabotHW->getHCSR04()->setDistanceMeasuredCallback(&distance_measured_callback);
+	//pHadabotHW->getLeftWheelRotationSensor()->setDataUpdatedCallback(&wheel_radsp_left_callback);
+	//pHadabotHW->getRightWheelRotationSensor()->setDataUpdatedCallback(&wheel_radsp_right_callback);
+
 	rclc_executor_spin(&executor);
 
 	RCCHECK(rcl_publisher_fini(&log_info_publisher, &node));

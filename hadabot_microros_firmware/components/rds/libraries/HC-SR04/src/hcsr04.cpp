@@ -61,7 +61,7 @@ HCSR04::HCSR04(int trigger, int echo, int minRange, int maxRange)
 
     sensor_evt_queue = xQueueCreate(1, sizeof(long int));
 
-    xTaskCreate(sensor_distance_trigger_task, "distance_trigger", 6144, this, 10, NULL);
+    xTaskCreate(sensor_distance_trigger_task, "distance_trigger", 6144, this, 6, NULL);
 
     attachInterruptArg(_echo, hcsr04_gpio_isr_handler, this, CHANGE);    
 }

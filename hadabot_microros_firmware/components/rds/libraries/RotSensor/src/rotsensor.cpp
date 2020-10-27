@@ -109,7 +109,8 @@ RotationSensor::RotationSensor(char* _sensor_name, uint32_t _sensor_pin, uint8_t
  pMotor{_pMotor}, 
  disk_holes_count(_disk_holes_count), 
  mode(_mode), 
- hole_width_ratio{_hole_width_ratio} 
+ hole_width_ratio{_hole_width_ratio},
+ dataUpdatedCallback(NULL)
  {
 	 
 	angular_velocity = 0;
@@ -121,7 +122,7 @@ RotationSensor::RotationSensor(char* _sensor_name, uint32_t _sensor_pin, uint8_t
     timer = timerBegin(timer_num, TIMER_DIVIDER, true);	
 	
     sensor_evt_queue = xQueueCreate(10, sizeof(double));
-    xTaskCreate(sensor_radsp_calc_task, sensor_name, 6144, this, 10, NULL);
+    xTaskCreate(sensor_radsp_calc_task, sensor_name, 6144, this, 8, NULL);
 
 	if (mode == FRONT_CHANGE)
 		attachInterruptArg(sensor_pin, rotation_sensor_gpio_isr_handler, this, CHANGE);

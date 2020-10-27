@@ -14,7 +14,10 @@ public:
 	~RotationSensor();
 	
 	inline float getAngularVelocity() {return angular_velocity;};
-	inline void setAngularVelocity(float _angular_velocity) {angular_velocity = _angular_velocity;};
+	inline void setAngularVelocity(float _angular_velocity) {
+		angular_velocity = _angular_velocity; 
+		//if (dataUpdatedCallback != NULL) (*dataUpdatedCallback)(angular_velocity);
+	}
 	
 	inline uint32_t getSensorPIN() {return sensor_pin;};
 	inline hw_timer_t* getHwTimer() {return timer;}
@@ -32,6 +35,8 @@ public:
 	inline ERotSensorMode getSensorMode() {return mode;}
 	inline int getDiskHolesCount() {return disk_holes_count;}
 	inline double getHoleWidthRatio() {return hole_width_ratio;}
+
+	inline void setDataUpdatedCallback(void (*_dataUpdatedCallback)(float)) {dataUpdatedCallback = _dataUpdatedCallback;}
 	
 protected:
 	char* sensor_name;
@@ -52,6 +57,7 @@ protected:
 	portMUX_TYPE timerMux;
 	
 	xQueueHandle sensor_evt_queue = NULL;
+	void (*dataUpdatedCallback)(float);
 };
 
 #endif 
