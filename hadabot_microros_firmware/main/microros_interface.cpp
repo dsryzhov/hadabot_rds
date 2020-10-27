@@ -103,18 +103,11 @@ void wheel_radsp_timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
 	}		
 }
 
-void distance_timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
-	UNUSED(last_call_time);
-	
-	if (timer != NULL) {
-		
-		distance_msg.data = pHadabotHW->getHCSR04()->getDistanceInMillimeters();
-		
+void distance_measured_callback(int distance) {
+		distance_msg.data = distance;
 		if (distance_msg.data != -1 ) {
-
 			rcl_publish(&distance_publisher, (const void*)&distance_msg, NULL);	
-		}
-	}		
+		}		
 }
 
 
@@ -145,10 +138,9 @@ extern "C"  void appMain(void * arg)
 	rcl_timer_t wheel_radsp_timer = rcl_get_zero_initialized_timer();
 	RCCHECK(rclc_timer_init_default(&wheel_radsp_timer, &support, RCL_MS_TO_NS(CONFIG_HADABOT_WHEELS_RADPS_MSG_PUBLISH_PERIOD), wheel_radsp_timer_callback));
 
-	rcl_timer_t distance_timer = rcl_get_zero_initialized_timer();
-	RCCHECK(rclc_timer_init_default(&distance_timer, &support, RCL_MS_TO_NS(60), distance_timer_callback));
 	
-	
+	pHadabotHW->getHCSR04()->setDistanceMeasuredCallback(&distance_measured_callback);
+
 	RCCHECK(rclc_publisher_init_default(&wheel_radps_left_publisher, &node,
 		ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32), "hadabot/wheel_radps_left"));
 
@@ -187,7 +179,6 @@ extern "C"  void appMain(void * arg)
 	RCCHECK(rclc_executor_add_subscription(&executor, &subscriber_wheel_power_left, &wheel_power_left_msg, &wheel_power_left_callback, ON_NEW_DATA));
 	RCCHECK(rclc_executor_add_subscription(&executor, &subscriber_wheel_power_right, &wheel_power_right_msg, &wheel_power_right_callback, ON_NEW_DATA));
 	RCCHECK(rclc_executor_add_timer(&executor, &wheel_radsp_timer));		
-	RCCHECK(rclc_executor_add_timer(&executor, &distance_timer));
 	RCCHECK(rclc_executor_add_timer(&executor, &log_info_timer));	
 
 	
