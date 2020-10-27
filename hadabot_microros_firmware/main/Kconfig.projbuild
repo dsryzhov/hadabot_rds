@@ -40,4 +40,12 @@ config HADABOT_WHEELS_RADPS_MSG_PUBLISH_PERIOD
     int "Period (in ms) for publishing measurements of wheels angular velocities"
     default 15
 	
+config HADABOT_FW_SONAR_TRIG_PIN
+    int "Pin number for forward sonar trigger signal"
+    default 14
+	
+config HADABOT_FW_SONAR_ECHO_PIN
+    int "Pin number for forward sonar echo signal"
+    default 12	
+	
 endmenu

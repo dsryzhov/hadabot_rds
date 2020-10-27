@@ -54,13 +54,13 @@ menu "WiFi Configuration"
 
     config ESP_WIFI_SSID
         string "WiFi SSID"
-        default "MGTS_GPON_31CC"
+        default "SSID"
         help
             SSID (network name) for the example to connect to.
 
     config ESP_WIFI_PASSWORD
         string "WiFi Password"
-        default "9HK96KHY"
+        default "password"
         help
             WiFi password (WPA or WPA2) for the example to use.
 
