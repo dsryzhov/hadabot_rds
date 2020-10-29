@@ -1,8 +1,11 @@
 #include "rotsensor.h"
+#include "driver/gpio.h"
 
 
 #define TIMER_DIVIDER         16  //  Hardware timer clock divider
 #define ROT_SENSOR_DISK_HOLES 20
+
+#define ESP_INTR_FLAG_DEFAULT 0
 
 /*
 TODO
@@ -15,53 +18,40 @@ static void IRAM_ATTR rotation_sensor_gpio_isr_handler(void* arg)
 {
 	RotationSensor* sensor = static_cast<RotationSensor*>(arg);
 	
-	portMUX_TYPE timerMux = sensor->getTimerMux();
-	
-	portENTER_CRITICAL_ISR(&timerMux);
-	
+	int sensor_level = sensor->getSensorLevel();
 
     uint32_t gpio_num = (uint32_t) sensor->getSensorPIN();
-	xQueueHandle sensor_evt_queue = sensor->getSensorEvtQueue();
+	int new_sensor_level = gpio_get_level((gpio_num_t)gpio_num);							
 	
-	
-	int sensor_level = sensor->getSensorLevel();
-	double last_time_sec = sensor->getLastMeasuredTime();
-	
-	int new_sensor_level = digitalRead(gpio_num);
-	
-//	if (new_sensor_level != sensor_level) {
+	if (new_sensor_level != sensor_level ) {
 		
 
 		double cur_time_sec = timerReadSeconds(sensor->getHwTimer());
-		
+		double last_time_sec = sensor->getLastMeasuredTime();
+
 		double delta_time_sec = cur_time_sec - last_time_sec;
-		
-		ERotSensorMode mode = sensor->getSensorMode();
-		
-		if (mode == FRONT_CHANGE) {
-			if (delta_time_sec > 0.005 && sensor_level != new_sensor_level) {
-				xQueueSendFromISR(sensor_evt_queue, &delta_time_sec, NULL);		
-			}
-		}
-		else 
-			if (mode == FRONT_HIGH) {
-			}
-		
-		
-		sensor->setLastMeasuredTime(cur_time_sec);
-		sensor->setSensorLevel(new_sensor_level);
-		
-		portEXIT_CRITICAL_ISR(&timerMux);
-		
-		
-//	}
+
+		if (delta_time_sec > 0 ) {
+			
+			portMUX_TYPE timerMux = sensor->getTimerMux();
+			portENTER_CRITICAL_ISR(&timerMux);	
+			sensor->setLastMeasuredTime(cur_time_sec);
+			sensor->setSensorLevel(new_sensor_level);
+			portEXIT_CRITICAL_ISR(&timerMux);
+
+			xQueueHandle sensor_evt_queue = sensor->getSensorEvtQueue();	
+			xQueueSendFromISR(sensor_evt_queue, &delta_time_sec, NULL);	
+		}				
+	}
 }
 
 static void sensor_radsp_calc_task(void* arg)
 {
 	
 	RotationSensor* sensor = static_cast<RotationSensor*>(arg);
-	
+	portMUX_TYPE timerMux = sensor->getTimerMux();
+	uint32_t gpio_num = (uint32_t) sensor->getSensorPIN();
+
 	xQueueHandle sensor_evt_queue = sensor->getSensorEvtQueue();
 	Motor* pMotor = sensor->getMotor();
 	EMotorState motor_state;
@@ -69,38 +59,81 @@ static void sensor_radsp_calc_task(void* arg)
 	ERotSensorMode mode = sensor->getSensorMode();
 	int disk_holes_count = sensor->getDiskHolesCount();
 	double hole_width_ratio = sensor->getHoleWidthRatio()/100.0;
-	
-    double delta_time_sec;
-    for(;;) {
-        if(xQueueReceive(sensor_evt_queue, &delta_time_sec, portMAX_DELAY)) {
-			if (delta_time_sec > 0.0) {
-				
-				int sensor_level = sensor->getSensorLevel();
-				
-				angular_velocity = 2*3.141596 / disk_holes_count / delta_time_sec;
-				
-				if (mode == FRONT_CHANGE) {
-						
-					// текущий уровень сигнала сенсора - высокий, т.е. отверстие. Значит прошедший соответствует перегородке, которая шире отверстия.
-					if (sensor_level == 1) angular_velocity *= hole_width_ratio;//13.0/21.0;  
-					else angular_velocity *= 1.0-hole_width_ratio; //8.0/21.0;
-				}
 
-				int sign = 1;
-				motor_state = pMotor->getMotorState();
-				if (motor_state < 0) sign = -1;
+	const TickType_t xDelay = 60 / portTICK_PERIOD_MS;
+	bool flLeftMotor = false;
+	if (strcmp(sensor->getName(), "LeftMotorRotationSensor") == 0) 
+		flLeftMotor = true;
+
+	double prev_delta_time_sec = 0;
+    double delta_time_sec;
+	double full_delta_time_sec;
+	int sign;
+    for(;;) {
+        if(xQueueReceive(sensor_evt_queue, &delta_time_sec, xDelay) == pdTRUE ) {
+			int sensor_level = sensor->getSensorLevel();
+
+			if (sensor_level == 1) {
+				if (prev_delta_time_sec != 0) {
+						full_delta_time_sec = delta_time_sec + prev_delta_time_sec;
+						angular_velocity = 2*3.141596 / disk_holes_count / full_delta_time_sec;
+
+						motor_state = pMotor->getMotorState();
+						if (motor_state > 0) sign = 1;
+						else 
+							if (motor_state < 0) sign = -1;
+							else sign = 0;
+					
+						angular_velocity = angular_velocity * sign;	
+						
+						//portENTER_CRITICAL_ISR(&timerMux);
+						
+						//portEXIT_CRITICAL_ISR(&timerMux);
+						//int cur_sensor_level = gpio_get_level((gpio_num_t)gpio_num);							
+						if (flLeftMotor)
+							printf("delta_time : %f  radsp : %f\n", (float)full_delta_time_sec, (float)angular_velocity);				
+							//printf("delta_time : %f  radsp : %f    level: %d     cur: %d \n", (float)full_delta_time_sec, (float)angular_velocity, sensor_level, cur_sensor_level);				
+
+					
+						prev_delta_time_sec = 0;
+						sensor->setAngularVelocity(angular_velocity);
+				} else {
+					prev_delta_time_sec = delta_time_sec;	
+					//if (flLeftMotor) printf("Here 2 \n");
+				}
+			}
+			else {
+				prev_delta_time_sec = delta_time_sec;
+				//if (flLeftMotor) printf("Here 3 \n");
+			}
 			
-				if (motor_state != STOPED)
-					angular_velocity = angular_velocity * sign;	
-				else angular_velocity = 0;
-				
-				//printf("delta_time : %f  radsp : %f\n", (float)delta_time_sec, (float)angular_velocity);				
-			} else angular_velocity = 0;
-			sensor->setAngularVelocity(angular_velocity);
-        }
+        } else {
+			//if (flLeftMotor) printf("Here 4 \n");
+			motor_state = pMotor->getMotorState();
+			if (motor_state == STOPING_FORWARD || motor_state == STOPING_BACKWARD) {
+				sensor->getMotor()->evStoped();
+				sensor->setAngularVelocity(0);
+				prev_delta_time_sec = 0;
+			}
+		}
     }
 }
 
+float RotationSensor::getAngularVelocity() 
+{
+	float res;
+	portENTER_CRITICAL_ISR(&timerMux);
+	res = angular_velocity;			
+	portEXIT_CRITICAL_ISR(&timerMux);	
+	return res;
+}
+
+void RotationSensor::setAngularVelocity(float _angular_velocity) {
+	portENTER_CRITICAL_ISR(&timerMux);
+	angular_velocity = _angular_velocity;			
+	portEXIT_CRITICAL_ISR(&timerMux);	
+	if (dataUpdatedCallback != NULL) (*dataUpdatedCallback)(_angular_velocity);
+}
 
 RotationSensor::RotationSensor(char* _sensor_name, uint32_t _sensor_pin, uint8_t _timer_num, Motor* _pMotor, int _disk_holes_count, ERotSensorMode _mode, double _hole_width_ratio) : 
  sensor_name(_sensor_name), 
@@ -114,25 +147,41 @@ RotationSensor::RotationSensor(char* _sensor_name, uint32_t _sensor_pin, uint8_t
  {
 	 
 	angular_velocity = 0;
-	timerMux = portMUX_INITIALIZER_UNLOCKED;
+	
 	pinMode(sensor_pin, INPUT_PULLUP);
+	//pinMode(sensor_pin, INPUT);
 
 	last_measured_time = 0;	
 	sensor_level = digitalRead(sensor_pin);
     timer = timerBegin(timer_num, TIMER_DIVIDER, true);	
 	
     sensor_evt_queue = xQueueCreate(10, sizeof(double));
-    xTaskCreate(sensor_radsp_calc_task, sensor_name, 6144, this, 8, NULL);
+	sensorTask = NULL;
 
-	if (mode == FRONT_CHANGE)
-		attachInterruptArg(sensor_pin, rotation_sensor_gpio_isr_handler, this, CHANGE);
-	else 
-		if (mode == FRONT_HIGH)
-			attachInterruptArg(sensor_pin, rotation_sensor_gpio_isr_handler, this, HIGH);
+ 
+}
+
+void RotationSensor::begin() {
+
+	timerMux = portMUX_INITIALIZER_UNLOCKED;
+    xTaskCreatePinnedToCore(sensor_radsp_calc_task, sensor_name, 6144, this, 6, &sensorTask, 1);
+	//xTaskCreate(sensor_radsp_calc_task, sensor_name, 6144, this, 6, &sensorTask);
+
+//	attachInterruptArg(digitalPinToInterrupt(sensor_pin), rotation_sensor_gpio_isr_handler, this, RISING);
+
+
+	gpio_set_intr_type((gpio_num_t)sensor_pin, GPIO_INTR_ANYEDGE);
+	gpio_set_direction((gpio_num_t)sensor_pin, GPIO_MODE_INPUT);
+	gpio_set_pull_mode((gpio_num_t)sensor_pin, GPIO_PULLUP_PULLDOWN);
+
+	gpio_isr_handler_add((gpio_num_t) sensor_pin, rotation_sensor_gpio_isr_handler, this);		
+
+
 }
 
 RotationSensor::~RotationSensor() {
 	timerEnd(timer);
+	if (sensorTask != NULL) vTaskDelete(sensorTask);
 }
 	
 

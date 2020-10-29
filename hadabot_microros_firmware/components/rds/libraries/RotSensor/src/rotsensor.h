@@ -12,12 +12,11 @@ class RotationSensor {
 public:
 	RotationSensor(char* _sensor_name, uint32_t _sensor_pin, uint8_t _timer_num, Motor* _pMotor, int _disk_holes_count = 20, ERotSensorMode _mode = FRONT_CHANGE, double _hole_width_ratio = 0.5);
 	~RotationSensor();
+
+	void begin();
 	
-	inline float getAngularVelocity() {return angular_velocity;};
-	inline void setAngularVelocity(float _angular_velocity) {
-		angular_velocity = _angular_velocity; 
-		//if (dataUpdatedCallback != NULL) (*dataUpdatedCallback)(angular_velocity);
-	}
+	float getAngularVelocity();
+	void setAngularVelocity(float _angular_velocity);
 	
 	inline uint32_t getSensorPIN() {return sensor_pin;};
 	inline hw_timer_t* getHwTimer() {return timer;}
@@ -37,6 +36,8 @@ public:
 	inline double getHoleWidthRatio() {return hole_width_ratio;}
 
 	inline void setDataUpdatedCallback(void (*_dataUpdatedCallback)(float)) {dataUpdatedCallback = _dataUpdatedCallback;}
+	inline char* getName() {return sensor_name; }
+	
 	
 protected:
 	char* sensor_name;
@@ -58,6 +59,7 @@ protected:
 	
 	xQueueHandle sensor_evt_queue = NULL;
 	void (*dataUpdatedCallback)(float);
+	TaskHandle_t sensorTask;
 };
 
 #endif 

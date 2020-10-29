@@ -32,22 +32,26 @@ extern "C" void microros_interface_init(HadabotHW* _pHadabotHW);
 
 void wifi_init_sta()
 {
+    /*
     Serial.println();
     Serial.println();
     Serial.print("Connecting to ");
     Serial.println(ESP_WIFI_SSID);
+    */
 
     WiFi.begin(ESP_WIFI_SSID, ESP_WIFI_PASS);
 
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
-        Serial.print(".");
+        //Serial.print(".");
     }
 
+    /*
     Serial.println("");
     Serial.println("WiFi connected");
     Serial.println("IP address: ");
     Serial.println(WiFi.localIP());
+    */
 }
 
 extern "C" void app_main(void)
@@ -67,6 +71,8 @@ extern "C" void app_main(void)
     Serial.begin(115200);
     wifi_init_sta();
 #endif  // UCLIENT_PROFILE_UDP
+
+    hadabot_hw.begin();
 
 	microros_interface_init(&hadabot_hw);
 }

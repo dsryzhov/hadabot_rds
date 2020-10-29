@@ -12,7 +12,7 @@ public:
 	HadabotHW();
 	~HadabotHW();
 	
-	void init();
+	void begin();
 	
 	inline Motor* getLeftMotor() {return &leftMotor; }
 	inline Motor* getRightMotor() {return &rightMotor; }
