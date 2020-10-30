@@ -8,6 +8,7 @@
 #include <std_msgs/msg/header.h>
 #include <std_msgs/msg/string.h>
 #include <std_msgs/msg/float32.h>
+#include <sensor_msgs/msg/temperature.h>
 #include <geometry_msgs/msg/twist.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -32,10 +33,14 @@
 //#include "rotsensor.h"
 //#include "motor.h"
 
+#define FRAME_ID_SIZE 10
+#define LOG_INFO_MSG_SIZE 200
+
 HadabotHW* pHadabotHW;
 
+rcl_clock_t ros_clock;
 
-#define LOG_INFO_MSG_SIZE 200
+
 rcl_publisher_t log_info_publisher;
 std_msgs__msg__String log_info_msg;
 
@@ -46,11 +51,16 @@ std_msgs__msg__Float32 wheel_power_right_msg;
 
 rcl_publisher_t wheel_radps_left_publisher;
 rcl_publisher_t wheel_radps_right_publisher;
-std_msgs__msg__Float32 wheel_radps_left_msg;
-std_msgs__msg__Float32 wheel_radps_right_msg;
+
+sensor_msgs__msg__Temperature wheel_radps_left_msg;
+sensor_msgs__msg__Temperature wheel_radps_right_msg;
+
+//std_msgs__msg__Float32 wheel_radps_left_msg;
+//std_msgs__msg__Float32 wheel_radps_right_msg;
 
 rcl_publisher_t distance_publisher;
-std_msgs__msg__Float32 distance_msg;
+//std_msgs__msg__Float32 distance_msg;
+sensor_msgs__msg__Temperature distance_msg;
 
 xQueueHandle distance_evt_queue = NULL;
 xQueueHandle wheel_radsp_left_evt_queue = NULL;
@@ -62,9 +72,21 @@ void log_info_timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 
 	if (timer != NULL) {
 		// Fill the message timestamp
+		/*
 		struct timespec ts;
 		clock_gettime(CLOCK_REALTIME, &ts);
 		sprintf(log_info_msg.data.data, "Hadabot heartbeat %ld", ts.tv_sec);
+		*/
+
+		rcl_time_point_value_t base_time_point_value;
+		rcl_clock_get_now(&ros_clock, &base_time_point_value);
+		double time_sec =  base_time_point_value / 1000000000.0;
+		sprintf(log_info_msg.data.data, "Hadabot heartbeat %lf", time_sec);
+
+
+	 //fprintf(stdout, "Cur time ns %llu, msg time ns %llu, difference %lld / %ld\n",
+    //    curtime, msgtime, duration_ns, duration_ms);		
+
 		//sprintf(log_info_msg.data.data, "Hadabot heartbeat");
 		log_info_msg.data.size = strlen(log_info_msg.data.data);
 
@@ -99,6 +121,56 @@ bool flRadspsRightZeroPublished = false;
 
 void sensor_data_publish_timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
 	UNUSED(last_call_time);
+
+	if (timer != NULL) {
+		int sec = 0;
+		unsigned int nanosec = 0;
+		float val = 0;
+		pHadabotHW->getLeftWheelRotationSensor()->getAngularVelocity(&val, &sec, &nanosec);
+		//int sensor_level = pHadabotHW->getLeftWheelRotationSensor()->getSensorLevel();
+		//printf("sensor_level : %d\n", sensor_level);			
+
+		wheel_radps_left_msg.temperature = val;
+		wheel_radps_left_msg.variance = 0;
+		wheel_radps_left_msg.header.stamp.sec = sec;
+		wheel_radps_left_msg.header.stamp.nanosec = nanosec;
+		
+
+		pHadabotHW->getRightWheelRotationSensor()->getAngularVelocity(&val, &sec, &nanosec);
+		wheel_radps_right_msg.temperature = val;
+		wheel_radps_right_msg.variance = 0;
+		wheel_radps_right_msg.header.stamp.sec = sec;
+		wheel_radps_right_msg.header.stamp.nanosec = nanosec;
+
+		distance_msg.temperature = pHadabotHW->getHCSR04()->getDistanceInMillimeters();
+		distance_msg.variance = 0;
+		distance_msg.header.stamp.sec = distance_msg.header.stamp.nanosec = 0;
+		
+		
+
+		if (wheel_radps_left_msg.temperature != 0 || (wheel_radps_left_msg.temperature == 0 && !flRadspsLeftZeroPublished)) {
+			rcl_publish(&wheel_radps_left_publisher, (const void*)&wheel_radps_left_msg, NULL);	
+			if (wheel_radps_left_msg.temperature  == 0) flRadspsLeftZeroPublished = true;
+			else flRadspsLeftZeroPublished = false;
+		}
+		
+		
+		if (wheel_radps_right_msg.temperature != 0 || (wheel_radps_right_msg.temperature == 0 && !flRadspsRightZeroPublished)) {		
+			//printf("val : %f  sec: %d  nanosec %d\n", val, sec, nanosec);			
+			rcl_publish(&wheel_radps_right_publisher, (const void*)&wheel_radps_right_msg, NULL);			
+			if (wheel_radps_right_msg.temperature  == 0) flRadspsRightZeroPublished = true;
+			else flRadspsRightZeroPublished = false;
+
+		}
+			
+		rcl_publish(&distance_publisher, (const void*)&distance_msg, NULL);			
+	}		
+}
+
+
+/*
+void sensor_data_publish_timer_callback(rcl_timer_t * timer, int64_t last_call_time) {
+	UNUSED(last_call_time);
 	
 	if (timer != NULL) {
 		
@@ -122,7 +194,9 @@ void sensor_data_publish_timer_callback(rcl_timer_t * timer, int64_t last_call_t
 		rcl_publish(&distance_publisher, (const void*)&distance_msg, NULL);			
 	}		
 }
+*/
 
+/*
 
 void wheel_radsp_left_callback(float angular_velocity) {
 	if (wheel_radsp_left_evt_queue != NULL)
@@ -184,6 +258,7 @@ void publish_msgs() {
 	}
 }
 
+
 void delete_publish_queues() {
 	pHadabotHW->getHCSR04()->setDistanceMeasuredCallback(NULL);
 	pHadabotHW->getLeftWheelRotationSensor()->setDataUpdatedCallback(NULL);
@@ -194,23 +269,50 @@ void delete_publish_queues() {
 	vQueueDelete(wheel_radsp_right_evt_queue);
 }
 
+*/
+
+void init_messages() {
+	log_info_msg.data.data = (char * ) malloc(LOG_INFO_MSG_SIZE * sizeof(char));
+	log_info_msg.data.size = 0;
+	log_info_msg.data.capacity = LOG_INFO_MSG_SIZE;
+
+	wheel_radps_left_msg.header.frame_id.data = (char*)malloc(FRAME_ID_SIZE * sizeof(char));
+	wheel_radps_left_msg.header.frame_id.size=0;
+	wheel_radps_left_msg.header.frame_id.capacity=FRAME_ID_SIZE;
+	sprintf(wheel_radps_left_msg.header.frame_id.data, "FramL");
+	wheel_radps_left_msg.header.frame_id.size = strlen(wheel_radps_left_msg.header.frame_id.data);
+	
+	wheel_radps_right_msg.header.frame_id.data = (char*)malloc(FRAME_ID_SIZE * sizeof(char));
+	wheel_radps_right_msg.header.frame_id.size=0;
+	wheel_radps_right_msg.header.frame_id.capacity=FRAME_ID_SIZE;
+	sprintf(wheel_radps_right_msg.header.frame_id.data, "FramR");
+	wheel_radps_right_msg.header.frame_id.size = strlen(wheel_radps_right_msg.header.frame_id.data);	
+
+	distance_msg.header.frame_id.data = (char*)malloc(FRAME_ID_SIZE * sizeof(char));
+	distance_msg.header.frame_id.size=0;
+	distance_msg.header.frame_id.capacity=FRAME_ID_SIZE;	
+	sprintf(distance_msg.header.frame_id.data, "FramD");	
+	distance_msg.header.frame_id.size = strlen(distance_msg.header.frame_id.data);	
+}
 
 
 extern "C"  void appMain(void * arg)
 {
-	log_info_msg.data.data = (char * ) malloc(LOG_INFO_MSG_SIZE * sizeof(char));
-	log_info_msg.data.size = 0;
-	log_info_msg.data.capacity = LOG_INFO_MSG_SIZE;
-	
+	init_messages();
+
   	rcl_allocator_t allocator = rcl_get_default_allocator();
 	rclc_support_t support;
 
 	// create init_options
 	RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
 
+   
 	// create node
 	rcl_node_t node = rcl_get_zero_initialized_node();
 	RCCHECK(rclc_node_init_default(&node, "hadabot_esp32", "", &support));
+
+ 	RCCHECK(rcl_ros_clock_init(&ros_clock, &allocator));
+
 
 	RCCHECK(rclc_publisher_init_default(&log_info_publisher, &node,
 		ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String), "hadabot/log/info"));
@@ -223,13 +325,13 @@ extern "C"  void appMain(void * arg)
 	RCCHECK(rclc_timer_init_default(&sensor_data_publish_timer, &support, RCL_MS_TO_NS(20), sensor_data_publish_timer_callback));
 	
 	RCCHECK(rclc_publisher_init_default(&wheel_radps_left_publisher, &node,
-		ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32), "hadabot/wheel_radps_left"));
+		ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, Temperature), "hadabot/wheel_radps_left_timestamped"));
 
 	RCCHECK(rclc_publisher_init_default(&wheel_radps_right_publisher, &node,
-		ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32), "hadabot/wheel_radps_right"));
+		ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, Temperature), "hadabot/wheel_radps_right_timestamped"));
 
 	RCCHECK(rclc_publisher_init_default(&distance_publisher, &node,
-		ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32), "hadabot/distance_forward"));
+		ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, Temperature), "hadabot/distance_forward_timestamped"));
 
 		
 	// create subscriber for wheel power left message
@@ -293,6 +395,7 @@ extern "C"  void appMain(void * arg)
 		
 	RCCHECK(rcl_subscription_fini(&subscriber_wheel_power_left, &node));
 	RCCHECK(rcl_subscription_fini(&subscriber_wheel_power_right, &node));
+	RCCHECK(rcl_ros_clock_fini(&ros_clock));
 
 	RCCHECK(rcl_node_fini(&node));
 	vTaskDelete(NULL);

@@ -68,7 +68,8 @@ HCSR04::HCSR04(int trigger, int echo, int minRange, int maxRange)
     pinMode(_echo, INPUT_PULLUP);
     digitalWrite(_trigger, LOW);  
 
-    sensor_evt_queue = xQueueCreate(1, sizeof(long int));
+ //   mutex = portMUX_INITIALIZER_UNLOCKED;
+    sensor_evt_queue = xQueueCreate(10, sizeof(long int));
     sensorTask = NULL;
 }
 
@@ -77,7 +78,6 @@ HCSR04::~HCSR04() {
 }
 
 void HCSR04::begin() {
-    mutex = portMUX_INITIALIZER_UNLOCKED;
     //xTaskCreate(sensor_distance_trigger_task, "distance_trigger", 6144, this, 6, sensorTask);
     xTaskCreatePinnedToCore(sensor_distance_trigger_task, "distance_trigger", 6144, this, 6, &sensorTask, 1);
 
@@ -93,18 +93,18 @@ void HCSR04::begin() {
 
 void HCSR04::setDistance(int _distance)
 {
-	portENTER_CRITICAL_ISR(&mutex);
+//	portENTER_CRITICAL_ISR(&mutex);
 	distance = _distance; 
-	portEXIT_CRITICAL_ISR(&mutex);	
+//	portEXIT_CRITICAL_ISR(&mutex);	
     if (distanceMeasuredCallback != NULL) 
         (*distanceMeasuredCallback)(_distance);
 }
 
 int HCSR04::getDistanceInMillimeters() {
     int res;
-	portENTER_CRITICAL_ISR(&mutex);
+//	portENTER_CRITICAL_ISR(&mutex);
 	res = distance; 
-	portEXIT_CRITICAL_ISR(&mutex);	
+//	portEXIT_CRITICAL_ISR(&mutex);	
     return res;
 };
 

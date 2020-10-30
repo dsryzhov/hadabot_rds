@@ -15,7 +15,7 @@ public:
 
 	void begin();
 	
-	float getAngularVelocity();
+	void getAngularVelocity(float *val, int *sec, unsigned int *nanosec);
 	void setAngularVelocity(float _angular_velocity);
 	
 	inline uint32_t getSensorPIN() {return sensor_pin;};
@@ -37,7 +37,7 @@ public:
 
 	inline void setDataUpdatedCallback(void (*_dataUpdatedCallback)(float)) {dataUpdatedCallback = _dataUpdatedCallback;}
 	inline char* getName() {return sensor_name; }
-	
+
 	
 protected:
 	char* sensor_name;
@@ -52,7 +52,11 @@ protected:
 	
 	
 	int sensor_level;
+	// time of measurement last front change of the signal
 	double last_measured_time; // in seconds
+
+	// time of in measurement for angular velocity
+	double measured_time; 
 	float angular_velocity;
 	volatile SemaphoreHandle_t timerSemaphore;
 	portMUX_TYPE timerMux;

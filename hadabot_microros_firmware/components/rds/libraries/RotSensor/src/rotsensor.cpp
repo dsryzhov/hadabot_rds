@@ -9,22 +9,23 @@
 
 /*
 TODO
-- set sensor calibration coefficients
-- configure min time between sensor signal changes
 - configure count of holes
 */
 
 static void IRAM_ATTR rotation_sensor_gpio_isr_handler(void* arg)
 {
 	RotationSensor* sensor = static_cast<RotationSensor*>(arg);
-	
+
+	portMUX_TYPE timerMux = sensor->getTimerMux();
+	portENTER_CRITICAL_ISR(&timerMux);	
+
 	int sensor_level = sensor->getSensorLevel();
 
     uint32_t gpio_num = (uint32_t) sensor->getSensorPIN();
-	int new_sensor_level = gpio_get_level((gpio_num_t)gpio_num);							
+	//int new_sensor_level = gpio_get_level((gpio_num_t)gpio_num);		
+	int new_sensor_level = digitalRead(gpio_num);		
 	
 	if (new_sensor_level != sensor_level ) {
-		
 
 		double cur_time_sec = timerReadSeconds(sensor->getHwTimer());
 		double last_time_sec = sensor->getLastMeasuredTime();
@@ -33,16 +34,16 @@ static void IRAM_ATTR rotation_sensor_gpio_isr_handler(void* arg)
 
 		if (delta_time_sec > 0 ) {
 			
-			portMUX_TYPE timerMux = sensor->getTimerMux();
-			portENTER_CRITICAL_ISR(&timerMux);	
+		
 			sensor->setLastMeasuredTime(cur_time_sec);
 			sensor->setSensorLevel(new_sensor_level);
-			portEXIT_CRITICAL_ISR(&timerMux);
+			
 
 			xQueueHandle sensor_evt_queue = sensor->getSensorEvtQueue();	
 			xQueueSendFromISR(sensor_evt_queue, &delta_time_sec, NULL);	
 		}				
 	}
+	portEXIT_CRITICAL_ISR(&timerMux);
 }
 
 static void sensor_radsp_calc_task(void* arg)
@@ -60,7 +61,7 @@ static void sensor_radsp_calc_task(void* arg)
 	int disk_holes_count = sensor->getDiskHolesCount();
 	double hole_width_ratio = sensor->getHoleWidthRatio()/100.0;
 
-	const TickType_t xDelay = 60 / portTICK_PERIOD_MS;
+	const TickType_t xDelay = 1000 / portTICK_PERIOD_MS;
 	bool flLeftMotor = false;
 	if (strcmp(sensor->getName(), "LeftMotorRotationSensor") == 0) 
 		flLeftMotor = true;
@@ -69,9 +70,14 @@ static void sensor_radsp_calc_task(void* arg)
     double delta_time_sec;
 	double full_delta_time_sec;
 	int sign;
+	int sensor_level;
     for(;;) {
         if(xQueueReceive(sensor_evt_queue, &delta_time_sec, xDelay) == pdTRUE ) {
-			int sensor_level = sensor->getSensorLevel();
+			portENTER_CRITICAL_ISR(&timerMux);
+			sensor_level = sensor->getSensorLevel();			
+			portEXIT_CRITICAL_ISR(&timerMux);			
+			
+			//if (flLeftMotor) printf("delta_time : %f \n", (float)delta_time_sec);				
 
 			if (sensor_level == 1) {
 				if (prev_delta_time_sec != 0) {
@@ -90,8 +96,8 @@ static void sensor_radsp_calc_task(void* arg)
 						
 						//portEXIT_CRITICAL_ISR(&timerMux);
 						//int cur_sensor_level = gpio_get_level((gpio_num_t)gpio_num);							
-						if (flLeftMotor)
-							printf("delta_time : %f  radsp : %f\n", (float)full_delta_time_sec, (float)angular_velocity);				
+						//if (flLeftMotor)
+							//printf("delta_time : %f  radsp : %f\n", (float)full_delta_time_sec, (float)angular_velocity);				
 							//printf("delta_time : %f  radsp : %f    level: %d     cur: %d \n", (float)full_delta_time_sec, (float)angular_velocity, sensor_level, cur_sensor_level);				
 
 					
@@ -119,18 +125,24 @@ static void sensor_radsp_calc_task(void* arg)
     }
 }
 
-float RotationSensor::getAngularVelocity() 
+void RotationSensor::getAngularVelocity(float *val, int *sec, unsigned int *nanosec)
 {
 	float res;
+	double _time;
 	portENTER_CRITICAL_ISR(&timerMux);
 	res = angular_velocity;			
+	_time = measured_time;
 	portEXIT_CRITICAL_ISR(&timerMux);	
-	return res;
+	(*val) = res;
+
+	(*sec) = (int) _time;
+	(*nanosec) = (int) ( (_time - (double) (*sec)) * 1000000000); 
 }
 
 void RotationSensor::setAngularVelocity(float _angular_velocity) {
 	portENTER_CRITICAL_ISR(&timerMux);
-	angular_velocity = _angular_velocity;			
+	angular_velocity = _angular_velocity;	
+	measured_time = last_measured_time;		
 	portEXIT_CRITICAL_ISR(&timerMux);	
 	if (dataUpdatedCallback != NULL) (*dataUpdatedCallback)(_angular_velocity);
 }
@@ -150,12 +162,11 @@ RotationSensor::RotationSensor(char* _sensor_name, uint32_t _sensor_pin, uint8_t
 	
 	pinMode(sensor_pin, INPUT_PULLUP);
 	//pinMode(sensor_pin, INPUT);
-
 	last_measured_time = 0;	
 	sensor_level = digitalRead(sensor_pin);
     timer = timerBegin(timer_num, TIMER_DIVIDER, true);	
 	
-    sensor_evt_queue = xQueueCreate(10, sizeof(double));
+    sensor_evt_queue = xQueueCreate(1, sizeof(double));
 	sensorTask = NULL;
 
  
@@ -164,18 +175,18 @@ RotationSensor::RotationSensor(char* _sensor_name, uint32_t _sensor_pin, uint8_t
 void RotationSensor::begin() {
 
 	timerMux = portMUX_INITIALIZER_UNLOCKED;
-    xTaskCreatePinnedToCore(sensor_radsp_calc_task, sensor_name, 6144, this, 6, &sensorTask, 1);
+    xTaskCreatePinnedToCore(sensor_radsp_calc_task, sensor_name, 6144, this, 6, &sensorTask, 0);
 	//xTaskCreate(sensor_radsp_calc_task, sensor_name, 6144, this, 6, &sensorTask);
 
-//	attachInterruptArg(digitalPinToInterrupt(sensor_pin), rotation_sensor_gpio_isr_handler, this, RISING);
+	attachInterruptArg(digitalPinToInterrupt(sensor_pin), rotation_sensor_gpio_isr_handler, this, CHANGE);
 
-
+/*
 	gpio_set_intr_type((gpio_num_t)sensor_pin, GPIO_INTR_ANYEDGE);
 	gpio_set_direction((gpio_num_t)sensor_pin, GPIO_MODE_INPUT);
 	gpio_set_pull_mode((gpio_num_t)sensor_pin, GPIO_PULLUP_PULLDOWN);
 
 	gpio_isr_handler_add((gpio_num_t) sensor_pin, rotation_sensor_gpio_isr_handler, this);		
-
+*/
 
 }
 

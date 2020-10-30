@@ -61,10 +61,10 @@ void HadabotHW::begin() {
 	
 	uint32_t flags = ESP_INTR_FLAG_EDGE | ESP_INTR_FLAG_IRAM;
 
-	gpio_install_isr_service(flags);
+//	gpio_install_isr_service(flags);
 	leftWheelRotationSensor.begin();
 	rightWheelRotationSensor.begin();
-	hcsr04.begin();
+	//hcsr04.begin();
 	
 	printf("Hadabot Hw started.\n");
 }
