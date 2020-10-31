@@ -115,6 +115,7 @@ from docker container you need to do additional
 Linux distros installed on WSL2 (or inside containers) does not see COM ports yet. 
 (Microsoft working on solving this now).
 
+
 To be able to flash\monitor from docker container you need to map Windows COM port (with ESP32 plugged in)
 to TCP port that can be used from docker container. 
 
@@ -143,7 +144,7 @@ For docker container based on WSL2 use command inside container (see Windows 10 
 ```
 use your host IP.
 
-## Check communication 
+## Check communication with Micro-ROS agent
 
 After monitor is starte in the monitor output  check that esp32 is connected to WiFi AP and 
 communication with MicroROS agent is established. 
@@ -168,6 +169,7 @@ Run the following commands in two different terminals
 ros2 topic echo /hadabot/wheel_radps_left/temperature
 ros2 topic echo /hadabot/log/wheel_radps_right/temperature
 ```
+
 
 Temperature message type is used to publish timestamped data from the firmware temporarily.
 In the future it will be changed to custom ROS message.
