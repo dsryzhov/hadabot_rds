@@ -14,7 +14,7 @@ services:
     image: microros/micro-ros-agent:foxy
     ports:
       - "8888:8888/udp"
-    command:  udp4 --port 8888 -v5
+    command:  udp4 --port 8888 -v1
     networks:
       - hadabot_network    
 
@@ -27,13 +27,6 @@ services:
     entrypoint: /bin/bash -c "source /opt/ros/foxy/setup.bash && cd /home/dsryzhov/hadabot/hadabot_rds/ros_ws && colcon build && . ./install/local_setup.bash && ros2 launch ./launch/hadabot_launch.py"
     volumes:
       - ./../:/home/dsryzhov/hadabot/hadabot_rds/ros_ws
-  
-  hadabot_log_info_service:
-    container_name: hadabot_log_info
-    image: ros:foxy
-    networks:
-      - hadabot_network
-    entrypoint: /bin/bash -c "source /opt/ros/foxy/setup.bash && ros2 topic echo /hadabot/log/info"
   
 networks:
   hadabot_network:
