@@ -2,7 +2,9 @@
 #define __ROTSENSOR_H
 
 #include "motor.h"
+#include "IPosEstimator.h"
 #include "Arduino.h"
+
 
 
 enum ERotSensorMode {FRONT_CHANGE, FRONT_HIGH};
@@ -15,8 +17,11 @@ public:
 
 	void begin();
 	
+	void setAngularVelocity(float _angular_velocity, double measure_delta_time);
+	
 	void getAngularVelocity(float *val, int *sec, unsigned int *nanosec);
-	void setAngularVelocity(float _angular_velocity);
+	float getAngularVelocityAtTime(double est_time);
+
 	
 	inline uint32_t getSensorPIN() {return sensor_pin;};
 	inline hw_timer_t* getHwTimer() {return timer;}
@@ -35,11 +40,13 @@ public:
 	inline int getDiskHolesCount() {return disk_holes_count;}
 	inline double getHoleWidthRatio() {return hole_width_ratio;}
 
-	inline void setDataUpdatedCallback(void (*_dataUpdatedCallback)(float)) {dataUpdatedCallback = _dataUpdatedCallback;}
+	inline void setPositionUpdateCallback(IPosEstimator* _pPosEstimator) {pPosEstimator = _pPosEstimator;}
 	inline char* getName() {return sensor_name; }
 
 	
 protected:
+	
+
 	char* sensor_name;
 	uint32_t sensor_pin;
 	uint8_t timer_num;
@@ -57,12 +64,17 @@ protected:
 
 	// time of in measurement for angular velocity
 	double measured_time; 
+
 	float angular_velocity;
+	float angular_acceleration;
+
 	volatile SemaphoreHandle_t timerSemaphore;
 	portMUX_TYPE timerMux;
 	
 	xQueueHandle sensor_evt_queue = NULL;
-	void (*dataUpdatedCallback)(float);
+
+	IPosEstimator* pPosEstimator;
+
 	TaskHandle_t sensorTask;
 };
 

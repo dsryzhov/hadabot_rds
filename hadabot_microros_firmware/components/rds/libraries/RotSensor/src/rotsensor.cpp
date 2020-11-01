@@ -61,7 +61,8 @@ static void sensor_radsp_calc_task(void* arg)
 	int disk_holes_count = sensor->getDiskHolesCount();
 	double hole_width_ratio = sensor->getHoleWidthRatio()/100.0;
 
-	const TickType_t xDelay = 1000 / portTICK_PERIOD_MS;
+	const double zero_angular_velocity_delay_ms = 60; // ms
+	const TickType_t xDelay = zero_angular_velocity_delay_ms / portTICK_PERIOD_MS;
 	bool flLeftMotor = false;
 	if (strcmp(sensor->getName(), "LeftMotorRotationSensor") == 0) 
 		flLeftMotor = true;
@@ -102,7 +103,7 @@ static void sensor_radsp_calc_task(void* arg)
 
 					
 						prev_delta_time_sec = 0;
-						sensor->setAngularVelocity(angular_velocity);
+						sensor->setAngularVelocity(angular_velocity, full_delta_time_sec);
 				} else {
 					prev_delta_time_sec = delta_time_sec;	
 					//if (flLeftMotor) printf("Here 2 \n");
@@ -118,12 +119,45 @@ static void sensor_radsp_calc_task(void* arg)
 			motor_state = pMotor->getMotorState();
 			if (motor_state == STOPING_FORWARD || motor_state == STOPING_BACKWARD) {
 				sensor->getMotor()->evStoped();
-				sensor->setAngularVelocity(0);
+				sensor->setAngularVelocity(0, zero_angular_velocity_delay_ms);
 				prev_delta_time_sec = 0;
 			}
 		}
     }
 }
+
+
+
+RotationSensor::RotationSensor(char* _sensor_name, uint32_t _sensor_pin, uint8_t _timer_num, Motor* _pMotor, int _disk_holes_count, ERotSensorMode _mode, double _hole_width_ratio) : 
+ sensor_name(_sensor_name), 
+ sensor_pin(_sensor_pin), 
+ timer_num(_timer_num), 
+ pMotor{_pMotor}, 
+ disk_holes_count(_disk_holes_count), 
+ mode(_mode), 
+ hole_width_ratio{_hole_width_ratio}
+ {
+	 
+	angular_velocity = 0;
+	angular_acceleration = 0;
+	
+	pinMode(sensor_pin, INPUT_PULLUP);
+	//pinMode(sensor_pin, INPUT);
+	last_measured_time = 0;	
+	sensor_level = digitalRead(sensor_pin);
+    timer = timerBegin(timer_num, TIMER_DIVIDER, true);	
+	
+    sensor_evt_queue = xQueueCreate(1, sizeof(double));
+	sensorTask = NULL;
+
+	pPosEstimator = NULL;
+}
+
+RotationSensor::~RotationSensor() {
+	timerEnd(timer);
+	if (sensorTask != NULL) vTaskDelete(sensorTask);
+}
+	
 
 void RotationSensor::getAngularVelocity(float *val, int *sec, unsigned int *nanosec)
 {
@@ -139,37 +173,38 @@ void RotationSensor::getAngularVelocity(float *val, int *sec, unsigned int *nano
 	(*nanosec) = (int) ( (_time - (double) (*sec)) * 1000000000); 
 }
 
-void RotationSensor::setAngularVelocity(float _angular_velocity) {
+ float RotationSensor::getAngularVelocityAtTime(double est_time) {
+	float _angular_velocity;
+	float _angular_acceleration;
+	double _measured_time;
+	double _time;
+	portENTER_CRITICAL_ISR(&timerMux);
+	_angular_velocity = angular_velocity;			
+	_angular_acceleration = angular_acceleration;
+	_measured_time = measured_time;
+	portEXIT_CRITICAL_ISR(&timerMux);	
+	
+	float res = _angular_velocity + _angular_acceleration * (est_time - _measured_time);
+	return res;
+}
+
+void RotationSensor::setAngularVelocity(float _angular_velocity, double measure_delta_time) {
+	float angular_velocity_prev = angular_velocity;
 	portENTER_CRITICAL_ISR(&timerMux);
 	angular_velocity = _angular_velocity;	
 	measured_time = last_measured_time;		
+
+	if (angular_velocity != 0) {
+		if (angular_velocity_prev != 0)
+			angular_acceleration = (angular_velocity - angular_velocity_prev) / measure_delta_time;	
+		else 
+			angular_acceleration = 0;
+	} else 
+		angular_acceleration = 0;
 	portEXIT_CRITICAL_ISR(&timerMux);	
-	if (dataUpdatedCallback != NULL) (*dataUpdatedCallback)(_angular_velocity);
-}
 
-RotationSensor::RotationSensor(char* _sensor_name, uint32_t _sensor_pin, uint8_t _timer_num, Motor* _pMotor, int _disk_holes_count, ERotSensorMode _mode, double _hole_width_ratio) : 
- sensor_name(_sensor_name), 
- sensor_pin(_sensor_pin), 
- timer_num(_timer_num), 
- pMotor{_pMotor}, 
- disk_holes_count(_disk_holes_count), 
- mode(_mode), 
- hole_width_ratio{_hole_width_ratio},
- dataUpdatedCallback(NULL)
- {
-	 
-	angular_velocity = 0;
-	
-	pinMode(sensor_pin, INPUT_PULLUP);
-	//pinMode(sensor_pin, INPUT);
-	last_measured_time = 0;	
-	sensor_level = digitalRead(sensor_pin);
-    timer = timerBegin(timer_num, TIMER_DIVIDER, true);	
-	
-    sensor_evt_queue = xQueueCreate(1, sizeof(double));
-	sensorTask = NULL;
-
- 
+	if (pPosEstimator != NULL) 
+		pPosEstimator->positionUpdateCallback(measured_time, measure_delta_time);
 }
 
 void RotationSensor::begin() {
@@ -190,11 +225,7 @@ void RotationSensor::begin() {
 
 }
 
-RotationSensor::~RotationSensor() {
-	timerEnd(timer);
-	if (sensorTask != NULL) vTaskDelete(sensorTask);
-}
-	
+
 
 
 

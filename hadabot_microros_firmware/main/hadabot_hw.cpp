@@ -46,11 +46,18 @@ HadabotHW::HadabotHW() :
 		FRONT_HIGH,
 		CONFIG_HADABOT_RIGHT_ROT_SENSOR_HOLE_WIDTH_RATIO),
 	hcsr04(CONFIG_HADABOT_FW_SONAR_TRIG_PIN, 
-		   CONFIG_HADABOT_FW_SONAR_ECHO_PIN, 20, 4000)
+		   CONFIG_HADABOT_FW_SONAR_ECHO_PIN, 20, 4000),
+	pos_estimator(0.032, 0.117)
+
 {
 //			  uint32_t flags = ESP_INTR_FLAG_EDGE |//< Edge-triggered interrupt
 //    ESP_INTR_FLAG_IRAM; //< ISR can be called if cache is disabled
 
+
+	pos_estimator.init(&leftWheelRotationSensor, &rightWheelRotationSensor);
+
+	leftWheelRotationSensor.setPositionUpdateCallback(&pos_estimator);
+	rightWheelRotationSensor.setPositionUpdateCallback(&pos_estimator);
 
 }
 
@@ -68,4 +75,6 @@ void HadabotHW::begin() {
 	
 	printf("Hadabot Hw started.\n");
 }
+
+
 
