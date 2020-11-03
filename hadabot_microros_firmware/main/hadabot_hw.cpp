@@ -1,6 +1,7 @@
 #include "hadabot_hw.h"
 #include "sdkconfig.h"
 #include "Arduino.h"
+#include "MPU6050_6Axis_MotionApps20.h"
 
 // use 5000 Hz as a motor contorl base frequency
 #define MOTOR_CONTROL_BASE_FREQ     5000
@@ -47,7 +48,6 @@ HadabotHW::HadabotHW() :
 		CONFIG_HADABOT_RIGHT_ROT_SENSOR_HOLE_WIDTH_RATIO),
 	hcsr04(CONFIG_HADABOT_FW_SONAR_TRIG_PIN, 
 		   CONFIG_HADABOT_FW_SONAR_ECHO_PIN, 20, 4000),
-	mpu(Wire),
 	pos_estimator(0.032, 0.117)
 
 {
@@ -65,6 +65,23 @@ HadabotHW::HadabotHW() :
 HadabotHW::~HadabotHW() {
 }
 
+#define PIN_SDA 21
+#define PIN_CLK 22
+
+void task_initI2C(void *ignore) {
+	i2c_config_t conf;
+	conf.mode = I2C_MODE_MASTER;
+	conf.sda_io_num = (gpio_num_t)PIN_SDA;
+	conf.scl_io_num = (gpio_num_t)PIN_CLK;
+	conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
+	conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
+	conf.master.clk_speed = 400000;
+	ESP_ERROR_CHECK(i2c_param_config(I2C_NUM_0, &conf));
+	ESP_ERROR_CHECK(i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0));
+	vTaskDelete(NULL);
+}
+
+
 void HadabotHW::begin() {
 	
 	uint32_t flags = ESP_INTR_FLAG_EDGE | ESP_INTR_FLAG_IRAM;
@@ -74,8 +91,23 @@ void HadabotHW::begin() {
 	rightWheelRotationSensor.begin();
 	//hcsr04.begin();
 
-	mpu.Initialize();
-	mpu.Calibrate();
+    xTaskCreate(&task_initI2C, "mpu_task", 2048, NULL, 6, NULL);
+    vTaskDelay(500/portTICK_PERIOD_MS);
+
+	mpu.initialize();
+
+	mpu.dmpInitialize();
+
+	// This need to be setup individually
+	mpu.setXGyroOffset(220);
+	mpu.setYGyroOffset(76);
+	mpu.setZGyroOffset(-85);
+	mpu.setZAccelOffset(1788);
+
+	mpu.setDMPEnabled(true);
+
+
+//	mpu.Calibrate();
 	
 	printf("Hadabot Hw started.\n");
 }

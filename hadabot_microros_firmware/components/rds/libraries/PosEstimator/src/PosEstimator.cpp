@@ -37,10 +37,38 @@ void PosEstimator::positionUpdateCallback(double measure_time, double measure_de
 
 }
 
-void PosEstimator::updatePosition(double wav_l, double wav_r, double dt_s) {
+bool PosEstimator::updateMpuAngles()
+{
 
-    pMpu->Execute();
-    
+        mpuIntStatus = pMpu->getIntStatus();
+		// get current FIFO count
+		fifoCount = pMpu->getFIFOCount();
+
+	    if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
+	        // reset so we can continue cleanly
+	        pMpu->resetFIFO();
+
+	    // otherwise, check for DMP data ready interrupt frequently)
+	    } else if (mpuIntStatus & 0x02) {
+	        // wait for correct available data length, should be a VERY short wait
+	        while (fifoCount < packetSize) fifoCount = pMpu->getFIFOCount();
+
+	        // read a packet from FIFO
+
+	        pMpu->getFIFOBytes(fifoBuffer, packetSize);
+	 		pMpu->dmpGetQuaternion(&q, fifoBuffer);
+			pMpu->dmpGetGravity(&gravity, &q);
+			pMpu->dmpGetYawPitchRoll(ypr, &q, &gravity);
+			//printf("YAW: %3.1f, ", ypr[0] * 180/M_PI);
+			//printf("PITCH: %3.1f, ", ypr[1] * 180/M_PI);
+			//printf("ROLL: %3.1f \n", ypr[2] * 180/M_PI);
+            return true;
+        } 
+        return false;
+}        
+
+void PosEstimator::updatePosition(double wav_l, double wav_r, double dt_s) {
+    updateMpuAngles();
 	
  	float d_left_m = (wav_l * dt_s * wheel_radius_m);
     float d_right_m = (wav_r * dt_s * wheel_radius_m);
@@ -56,7 +84,7 @@ void PosEstimator::updatePosition(double wav_l, double wav_r, double dt_s) {
     pos.y += y_m_dt;
 	//pos.theta += theta_rad_dt;
 
-    pos.theta = pMpu->GetAngZ() * PI / 180.0 ;
+    pos.theta = ypr[0];
 
     if (pos.theta > PI) pos.theta = pos.theta - 2*PI ;
     else 

@@ -5,7 +5,9 @@
 #include "rotsensor.h"
 #include "hcsr04.h"
 #include "PosEstimator.h"
-#include "TinyMPU6050.h"
+//#include "TinyMPU6050.h"
+#include "MPU6050.h"
+
 
 class HadabotHW {
 public:

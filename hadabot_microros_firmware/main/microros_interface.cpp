@@ -136,10 +136,14 @@ void sensor_data_publish_timer_callback(rcl_timer_t * timer, int64_t last_call_t
 
 	rcl_publish(&position_publisher, (const void*)&position_msg, NULL);	
 
-	MPU6050* pMpu = pHadabotHW->getMPU6050();
-	pMpu->Execute();
-	float  theta = pMpu->GetAngZ();
-	printf("theta: %f\n ", theta);
+
+	//MPU6050* pMpu = pHadabotHW->getMPU6050();
+	//pMpu->Execute();
+
+//	pPosEstimator->updateMpuAngles();
+//	float  theta = pPosEstimator->getMpuYaw();
+
+//	printf("theta: %f\n ", theta);
 
 
 /*
