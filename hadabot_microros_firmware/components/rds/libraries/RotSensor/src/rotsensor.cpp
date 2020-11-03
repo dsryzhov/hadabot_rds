@@ -201,7 +201,15 @@ void RotationSensor::setAngularVelocity(float _angular_velocity, double measure_
 			angular_acceleration = 0;
 	} else 
 		angular_acceleration = 0;
+
 	portEXIT_CRITICAL_ISR(&timerMux);	
+
+/*
+	bool flLeftMotor;
+	if (strcmp(sensor_name, "LeftMotorRotationSensor") == 0) 
+		flLeftMotor = true;
+	else flLeftMotor = false;
+	*/
 
 	if (pPosEstimator != NULL) 
 		pPosEstimator->positionUpdateCallback(measured_time, measure_delta_time);

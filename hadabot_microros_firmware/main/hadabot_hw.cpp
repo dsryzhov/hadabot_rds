@@ -1,6 +1,6 @@
 #include "hadabot_hw.h"
-
 #include "sdkconfig.h"
+#include "Arduino.h"
 
 // use 5000 Hz as a motor contorl base frequency
 #define MOTOR_CONTROL_BASE_FREQ     5000
@@ -47,6 +47,7 @@ HadabotHW::HadabotHW() :
 		CONFIG_HADABOT_RIGHT_ROT_SENSOR_HOLE_WIDTH_RATIO),
 	hcsr04(CONFIG_HADABOT_FW_SONAR_TRIG_PIN, 
 		   CONFIG_HADABOT_FW_SONAR_ECHO_PIN, 20, 4000),
+	mpu(Wire),
 	pos_estimator(0.032, 0.117)
 
 {
@@ -54,7 +55,7 @@ HadabotHW::HadabotHW() :
 //    ESP_INTR_FLAG_IRAM; //< ISR can be called if cache is disabled
 
 
-	pos_estimator.init(&leftWheelRotationSensor, &rightWheelRotationSensor);
+	pos_estimator.init(&leftWheelRotationSensor, &rightWheelRotationSensor, &mpu);
 
 	leftWheelRotationSensor.setPositionUpdateCallback(&pos_estimator);
 	rightWheelRotationSensor.setPositionUpdateCallback(&pos_estimator);
@@ -72,6 +73,9 @@ void HadabotHW::begin() {
 	leftWheelRotationSensor.begin();
 	rightWheelRotationSensor.begin();
 	//hcsr04.begin();
+
+	mpu.Initialize();
+	mpu.Calibrate();
 	
 	printf("Hadabot Hw started.\n");
 }

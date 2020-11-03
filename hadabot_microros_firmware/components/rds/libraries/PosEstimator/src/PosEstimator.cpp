@@ -1,5 +1,7 @@
 #include "PosEstimator.h"
 
+#define PI 3.141596
+
 PosEstimator::PosEstimator(float _wheel_radius_m, float _wheelbase_m) 
 : wheel_radius_m{_wheel_radius_m}, wheelbase_m{_wheelbase_m}
 {
@@ -7,9 +9,16 @@ PosEstimator::PosEstimator(float _wheel_radius_m, float _wheelbase_m)
 	pos.x = pos.y = pos.theta = 0;    
 }
 
-void PosEstimator::init(RotationSensor* _pLeftWheelRotationSensor, RotationSensor* _pRightWheelRotationSensor) {
+void PosEstimator::init(RotationSensor* _pLeftWheelRotationSensor, RotationSensor* _pRightWheelRotationSensor, MPU6050* _pMpu ) {
     pLeftWheelRotationSensor = _pLeftWheelRotationSensor;
     pRightWheelRotationSensor = _pRightWheelRotationSensor;
+    pMpu = _pMpu;
+}
+
+void PosEstimator::getPosition(Position& _pos) {
+    _pos.x = pos.x;
+    _pos.y = pos.y;
+    _pos.theta = pos.theta;
 }
 
 void PosEstimator::positionUpdateCallback(double measure_time, double measure_delta_time) {
@@ -29,6 +38,9 @@ void PosEstimator::positionUpdateCallback(double measure_time, double measure_de
 }
 
 void PosEstimator::updatePosition(double wav_l, double wav_r, double dt_s) {
+
+    pMpu->Execute();
+    
 	
  	float d_left_m = (wav_l * dt_s * wheel_radius_m);
     float d_right_m = (wav_r * dt_s * wheel_radius_m);
@@ -42,5 +54,11 @@ void PosEstimator::updatePosition(double wav_l, double wav_r, double dt_s) {
 
     pos.x += x_m_dt;
     pos.y += y_m_dt;
-	pos.theta += theta_rad_dt;
+	//pos.theta += theta_rad_dt;
+
+    pos.theta = pMpu->GetAngZ() * PI / 180.0 ;
+
+    if (pos.theta > PI) pos.theta = pos.theta - 2*PI ;
+    else 
+        if (pos.theta < -PI) pos.theta = pos.theta + 2*PI;
 }
