@@ -11,6 +11,11 @@ struct Position {
 	float x, y, theta;
 };
 
+struct Twist {
+    float v;
+    float w;
+};
+
 class PosEstimator : public IPosEstimator {
 public:
     PosEstimator(float _wheel_radius_m, float _wheelbase_m);
@@ -22,6 +27,9 @@ public:
     void updatePosition(double wav_l, double wav_r, double dt_s);
 
     void getPosition(Position& _pos);
+    void getTwist(Twist& _twist);
+    void getQuaternion(Quaternion _q);
+
     bool updateMpuAngles();
 
     float getMpuYaw() {return ypr[0];}
@@ -37,6 +45,7 @@ protected:
 	float wheelbase_m;
 
 	Position pos;
+    Twist twist;
 
 	double pos_update_time;
 

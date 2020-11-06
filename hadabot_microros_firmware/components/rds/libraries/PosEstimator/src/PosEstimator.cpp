@@ -7,6 +7,7 @@ PosEstimator::PosEstimator(float _wheel_radius_m, float _wheelbase_m)
 {
     pos_update_time = 0;
 	pos.x = pos.y = pos.theta = 0;    
+    twist.v = twist.w = 0;
 }
 
 void PosEstimator::init(RotationSensor* _pLeftWheelRotationSensor, RotationSensor* _pRightWheelRotationSensor, MPU6050* _pMpu ) {
@@ -19,6 +20,15 @@ void PosEstimator::getPosition(Position& _pos) {
     _pos.x = pos.x;
     _pos.y = pos.y;
     _pos.theta = pos.theta;
+}
+
+void PosEstimator::getQuaternion(Quaternion _q) {
+
+}
+
+void PosEstimator::getTwist(Twist& _twist) {
+    _twist.v = twist.v;
+    _twist.w = twist.w;
 }
 
 void PosEstimator::positionUpdateCallback(double measure_time, double measure_delta_time) {
@@ -89,4 +99,6 @@ void PosEstimator::updatePosition(double wav_l, double wav_r, double dt_s) {
     if (pos.theta > PI) pos.theta = pos.theta - 2*PI ;
     else 
         if (pos.theta < -PI) pos.theta = pos.theta + 2*PI;
+    twist.v = d_center_m / dt_s;
+    twist.w = 0;
 }

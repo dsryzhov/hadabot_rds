@@ -84,8 +84,7 @@ void task_initI2C(void *ignore) {
 
 void HadabotHW::begin() {
 	
-	uint32_t flags = ESP_INTR_FLAG_EDGE | ESP_INTR_FLAG_IRAM;
-
+//	uint32_t flags = ESP_INTR_FLAG_EDGE | ESP_INTR_FLAG_IRAM;
 //	gpio_install_isr_service(flags);
 	leftWheelRotationSensor.begin();
 	rightWheelRotationSensor.begin();

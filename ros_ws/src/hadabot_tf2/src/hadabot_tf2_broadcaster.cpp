@@ -19,7 +19,7 @@ public:
         tf_broadcaster_ =
             std::make_unique<tf2_ros::TransformBroadcaster>(*this);
         subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(
-            "/hadabot/odom", 10,
+            "/odom", 10,
             std::bind(&HadabotTF2Publisher::pose_callback, this, _1));
     }
 

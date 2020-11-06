@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(hadabot_driver)
+project(hadabot_msgs)
 
 # Default to C99
 if(NOT CMAKE_C_STANDARD)
@@ -17,28 +17,9 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-find_package(rclcpp REQUIRED)
-find_package(std_msgs REQUIRED)
-find_package(nav_msgs REQUIRED)
-find_package(sensor_msgs REQUIRED)
-find_package(hadabot_msgs REQUIRED)
-
-add_executable(hadabot_controller src/hadabot_controller.cpp)
-target_include_directories(hadabot_controller PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>)
-ament_target_dependencies(
-  hadabot_controller
-  "rclcpp"
-  "std_msgs"
-  "nav_msgs"
-  "sensor_msgs"
-  "hadabot_msgs"
-)
-
-install(TARGETS hadabot_controller
-  EXPORT export_${PROJECT_NAME}
-  DESTINATION lib/${PROJECT_NAME})
+# uncomment the following section in order to fill in
+# further dependencies manually.
+# find_package(<dependency> REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -50,5 +31,11 @@ if(BUILD_TESTING)
   #set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
+
+find_package(rosidl_default_generators REQUIRED)
+
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/Odom2D.msg"
+ )
 
 ament_package()

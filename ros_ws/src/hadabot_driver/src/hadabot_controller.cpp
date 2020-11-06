@@ -8,7 +8,10 @@
 #include "std_msgs/msg/float32.hpp"
 #include "sensor_msgs/msg/temperature.hpp"
 #include "nav_msgs/msg/odometry.hpp"
+#include "hadabot_msgs/msg/odom2_d.hpp"
+
 #include "geometry_msgs/msg/twist.hpp"
+#include "geometry_msgs/msg/pose2_d.hpp"
 #include "tf2/LinearMath/Quaternion.h"
 #include "tf2/LinearMath/Matrix3x3.h"
 
@@ -21,7 +24,7 @@ typedef enum {
 } HBSide;
 
 #define UPDATE_DT 20ms
-#define PUBLISH_DT 500ms
+#define PUBLISH_DT 20ms
 
 #define PI 3.14159265
 
@@ -38,6 +41,8 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::Temperature>::SharedPtr radps_left_sub_;
   rclcpp::Subscription<sensor_msgs::msg::Temperature>::SharedPtr radps_right_sub_;
   rclcpp::Subscription<sensor_msgs::msg::Temperature>::SharedPtr distance_forward_sub_;
+
+  rclcpp::Subscription<hadabot_msgs::msg::Odom2D>::SharedPtr odom2d_sub_;
 
   rclcpp::TimerBase::SharedPtr update_odometry_timer_;
   rclcpp::TimerBase::SharedPtr publish_odometry_timer_;
@@ -63,51 +68,27 @@ private:
   bool flLeftDataUpdated = false;
   bool flRightDataUpdated = false;
 
+  hadabot_msgs::msg::Odom2D::SharedPtr odom2D;
+
   nav_msgs::msg::Odometry::SharedPtr pose_;
   geometry_msgs::msg::Twist::SharedPtr twist_msg_;
 
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr twist_sub_;
+    rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr twist_sub_wh;
 
-  /***************************************************************************/
-  void wheel_radps(
-    const sensor_msgs::msg::Temperature::SharedPtr msg, HBSide which_side)
-  {
-    std::string the_side = which_side == HBSide::LEFT ? "left" : "right";
+void odom2d_cb(const hadabot_msgs::msg::Odom2D::SharedPtr msg)
+{
+  odom2D->x = msg->x;
+  odom2D->y = msg->y;
+  odom2D->theta = msg->theta;
+  odom2D->v = msg->v;
+  odom2D->w = msg->w;
 
-    switch(which_side) {
-      case HBSide::LEFT:
-      wheel_radps_left_ = msg->temperature;
-      wheel_radps_left_time = msg->header.stamp.sec + msg->header.stamp.nanosec / 1000000000.0;
-      flLeftDataUpdated = true;
-      break;
+  std::cout << "  x: " << msg->x <<  "   y: " << msg->y << "  theta : " <<  msg->theta << "  v : " <<  msg->v << "  w : " <<  msg->w << std::endl; 
+  std::cout.flush();
 
-      case HBSide::RIGHT:
-      wheel_radps_right_ = msg->temperature;
-      wheel_radps_right_time = msg->header.stamp.sec + msg->header.stamp.nanosec / 1000000000.0;
-      flRightDataUpdated = true;
-      break;
-    }
-  }
-
-  /***************************************************************************/
-  void wheel_radps_left_cb(const sensor_msgs::msg::Temperature::SharedPtr msg)
-  {
-/*    
-    auto cur_time_sec = this->now().seconds();
-    auto dt_s = cur_time_sec - last_lw_radps_update_sec;  
-    last_lw_radps_update_sec = cur_time_sec;
-    std::cout <<  "dt: " << dt_s << std::endl; 
-    std::cout.flush();
-  */  
-    this->wheel_radps(msg, HBSide::LEFT);
-  }
-
-  /***************************************************************************/
-  void wheel_radps_right_cb(const sensor_msgs::msg::Temperature::SharedPtr msg)
-  {  
-    this->wheel_radps(msg, HBSide::RIGHT);
-  }
-
+}
+ 
   void distance_forward_cb(const sensor_msgs::msg::Temperature::SharedPtr msg)
   {  
     this->distance_forward = msg->temperature;
@@ -144,7 +125,7 @@ private:
        last_odom_update_sec = cur_time_sec;
 
 */
-
+/*
     if (!flLeftDataUpdated || !flRightDataUpdated) return;
 
     auto dt_s = (wheel_radps_left_time +  wheel_radps_right_time) / 2.0 - (wheel_radps_left_time_prev + wheel_radps_right_time_prev) / 2.0;    
@@ -175,6 +156,7 @@ private:
 
     double x_m = pose_->pose.pose.position.x;
     double y_m = pose_->pose.pose.position.y;
+
     tf2::Quaternion q;
     q.setRPY(0.0, 0.0, theta_rad + theta_rad_dt);
     pose_->pose.pose.orientation.x = q.getX();
@@ -188,6 +170,23 @@ private:
     pose_->header.stamp = current_time;
     pose_->header.frame_id = "Fixed Frame";
 
+  */
+
+
+    tf2::Quaternion q;
+    q.setRPY(0.0, 0.0, odom2D->theta);
+    pose_->pose.pose.orientation.x = q.getX();
+    pose_->pose.pose.orientation.y = q.getY();
+    pose_->pose.pose.orientation.z = q.getZ(); 
+    pose_->pose.pose.orientation.w = q.getW(); 
+    pose_->pose.pose.position.x = odom2D->x;
+    pose_->pose.pose.position.y = odom2D->y;
+    pose_->twist.twist.linear.x = odom2D->v;
+    pose_->twist.twist.angular.z = odom2D->w;
+    pose_->header.stamp = current_time;
+    pose_->header.frame_id = "Fixed Frame";
+
+/*
    std::cout <<  "dt : " << dt_s;
    std::cout <<  "  dl : " << d_left_m <<  "   dr : " << d_right_m;
    std::cout << "  x: " << pose_->pose.pose.position.x <<  "   y: " << pose_->pose.pose.position.y << "  theta : " <<  theta_rad << "   v : " << pose_->twist.twist.linear.x  << "   w: " <<  pose_->twist.twist.angular.z << std::endl; 
@@ -195,7 +194,7 @@ private:
 
     flLeftDataUpdated = false;
     flRightDataUpdated = false;
-   
+*/ 
 
   }
 
@@ -274,15 +273,21 @@ public:
   HadabotController() : Node("hadabot_controller"), wheel_radius_m_(0.032), wheelbase_m_(0.117), 
   wheel_radps_left_(0.0), max_radps(21.0), wheel_radps_right_(0.0), 
   pose_(std::make_shared<nav_msgs::msg::Odometry>()), 
+  odom2D(std::make_shared<hadabot_msgs::msg::Odom2D>()), 
   twist_msg_(std::make_shared<geometry_msgs::msg::Twist>()),
   last_odom_update_sec(0), state(STOPED)
   {
     RCLCPP_INFO(this->get_logger(), "Starting Hadabot Controller");
 
-    twist_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
-        "/hadabot/cmd_vel", 10,
+    twist_sub_wh = this->create_subscription<geometry_msgs::msg::Twist>(
+        "/cmd_vel", 10,
         std::bind(&HadabotController::twist_cb, this, _1));
 
+    twist_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
+        "hadabot/cmd_vel", 10,
+        std::bind(&HadabotController::twist_cb, this, _1));
+
+/*
     radps_left_sub_ = this->create_subscription<sensor_msgs::msg::Temperature>(
         "/hadabot/wheel_radps_left_timestamped", 10,
         std::bind(&HadabotController::wheel_radps_left_cb, this, _1)
@@ -292,19 +297,28 @@ public:
       "/hadabot/wheel_radps_right_timestamped", 10,
       std::bind(&HadabotController::wheel_radps_right_cb, this, _1)
     );
-
+*/
     distance_forward_sub_ = this->create_subscription<sensor_msgs::msg::Temperature>(
         "/hadabot/distance_forward_timestamped", 10,
         std::bind(&HadabotController::distance_forward_cb, this, _1)
       );    
 
+
+    odom2d_sub_ = this->create_subscription<hadabot_msgs::msg::Odom2D>(
+        "/hadabot/odom2d", 10,
+        std::bind(&HadabotController::odom2d_cb, this, _1)
+      );        
+
     odometry_pub_ = this->create_publisher<nav_msgs::msg::Odometry>(
-      "/hadabot/odom", 10);
+      "/odom", 10);
+
+
 
     wheel_power_left_pub_ = this->create_publisher<std_msgs::msg::Float32>(
       "/hadabot/wheel_power_left", 10);
     wheel_power_right_pub_ = this->create_publisher<std_msgs::msg::Float32>(
       "/hadabot/wheel_power_right", 10);
+
 
     update_odometry_timer_ = this->create_wall_timer(
       UPDATE_DT, std::bind(&HadabotController::update_odometry, this));
@@ -312,6 +326,8 @@ public:
     publish_odometry_timer_ = this->create_wall_timer(
       PUBLISH_DT, std::bind(&HadabotController::publish_odometry, this));
 
+
+/*
     tf2::Quaternion q;
     q.setEuler(0,0,0);
     pose_->pose.pose.orientation.x  = q.getX();
@@ -322,6 +338,7 @@ public:
    tf2::Matrix3x3 m(q);
     double roll, pitch, yaw;
     m.getEulerYPR(yaw,pitch, roll);  
+*/    
    // std::cout << "roll: " <<  roll << "  pitch: " << pitch << "  yaw : " << yaw << std::endl;
    // std::cout.flush();
   }

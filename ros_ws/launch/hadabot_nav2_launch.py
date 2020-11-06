@@ -82,7 +82,8 @@ def generate_launch_description():
 
     declare_params_file_cmd = DeclareLaunchArgument(
         'params_file',
-        default_value=os.path.join(bringup_dir, 'params', 'nav2_params.yaml'),
+        #default_value=os.path.join(bringup_dir, 'params', 'nav2_params.yaml'),
+        default_value=os.path.join('/home/dsryzhov/hadabot/hadabot_rds/ros_ws', 'launch', 'nav2_params.yaml'),
         description=('Full path to the ROS2 parameters file to '
                      'use for all launched nodes'))
 
@@ -148,22 +149,5 @@ def generate_launch_description():
     # Add the actions to launch all of the navigation nodes
     ld.add_action(rviz_cmd)
     ld.add_action(nav2_bringup_cmd)
-
-    # Add turtlesim
-#    ld.add_action(Node(
-#        package='turtlesim',
-#        namespace='turtlesim1',
-#        executable='turtlesim_node',
-#        name='sim',
-#        remappings=[("/turtlesim1/turtle1/cmd_vel", "/cmd_vel")]
-#    ))
-
-    # Add tf2 broadcaster
-#    ld.add_action(Node(
-#        package='hadabot_tf2',
-#        executable='hadabot_tf2_broadcaster',
-#        name='hadabot_tf2_broadbaster_node',
-#        remappings=[("/pose", "/turtlesim1/turtle1/pose")]
-#    ))
 
     return ld

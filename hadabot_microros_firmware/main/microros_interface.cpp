@@ -9,8 +9,10 @@
 #include <std_msgs/msg/string.h>
 #include <std_msgs/msg/float32.h>
 #include <sensor_msgs/msg/temperature.h>
+#include <nav_msgs/msg/odometry.h>
 #include <geometry_msgs/msg/twist.h>
 #include <geometry_msgs/msg/pose2_d.h>
+#include <hadabot_msgs/msg/odom2_d.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <time.h>
@@ -21,14 +23,12 @@
 #include "freertos/queue.h"
 #endif
 
-
 #define RCCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){printf("Failed status on line %d: %d. Aborting.\n",__LINE__,(int)temp_rc);vTaskDelete(NULL);}}
 #define RCSOFTCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){printf("Failed status on line %d: %d. Continuing.\n",__LINE__,(int)temp_rc);}}
 
 //#include "esp_attr.h"
 //#include "driver/gpio.h"
 //#include "driver/timer.h"
-
 
 #include "hadabot_hw.h"
 //#include "rotsensor.h"
@@ -56,11 +56,13 @@ rcl_publisher_t wheel_radps_right_publisher;
 sensor_msgs__msg__Temperature wheel_radps_left_msg;
 sensor_msgs__msg__Temperature wheel_radps_right_msg;
 
+hadabot_msgs__msg__Odom2D odom2d_msg;
+rcl_publisher_t odom_publisher;
+
 //std_msgs__msg__Float32 wheel_radps_left_msg;
 //std_msgs__msg__Float32 wheel_radps_right_msg;
 
-rcl_publisher_t position_publisher;
-geometry_msgs__msg__Pose2D position_msg;
+//nav_msgs__msg__Odometry odom_msg;
 
 rcl_publisher_t distance_publisher;
 //std_msgs__msg__Float32 distance_msg;
@@ -127,14 +129,40 @@ void sensor_data_publish_timer_callback(rcl_timer_t * timer, int64_t last_call_t
 	UNUSED(last_call_time);
 	PosEstimator *pPosEstimator = pHadabotHW->getPosEstimator();
 	Position pos;
+	Twist twist;
 	pPosEstimator->getPosition(pos);
+	pPosEstimator->getTwist(twist);
 	//printf("x: %f   y:   %f    theta   %f\n", pos.x, pos.y, pos.theta);
 
-	position_msg.x = pos.x;
-	position_msg.y = pos.y;
-	position_msg.theta = pos.theta;
+	odom2d_msg.x = pos.x;
+	odom2d_msg.y = pos.y;
+	odom2d_msg.theta = pos.theta;
+	odom2d_msg.v = twist.v;
+	odom2d_msg.w = twist.w;
 
-	rcl_publish(&position_publisher, (const void*)&position_msg, NULL);	
+	rcl_publish(&odom_publisher, (const void*)&odom2d_msg, NULL);	
+	
+/*	
+
+	odom_msg.pose.pose.position.x = pos.x;
+	odom_msg.pose.pose.position.y = pos.y;
+	odom_msg.pose.pose.position.z = 0;
+
+    odom_msg.pose.pose.orientation.x = sin(pos.theta);
+    odom_msg.pose.pose.orientation.y = sin(pos.theta);
+    odom_msg.pose.pose.orientation.z = 0; 
+    odom_msg.pose.pose.orientation.w = 1; 
+
+	odom_msg.twist.twist.linear.x = twist.v;
+	odom_msg.twist.twist.linear.y = 0;
+	odom_msg.twist.twist.linear.z = 0;
+
+	odom_msg.twist.twist.angular.x = 0;
+	odom_msg.twist.twist.angular.y = 0;
+	odom_msg.twist.twist.angular.z = twist.w;
+
+	rcl_publish(&odom_publisher, (const void*)&odom_msg, NULL);	
+*/	
 
 
 	//MPU6050* pMpu = pHadabotHW->getMPU6050();
@@ -323,12 +351,18 @@ void init_messages() {
 	distance_msg.header.frame_id.size = strlen(distance_msg.header.frame_id.data);	
 
 /*
-	position_msg.header.frame_id.data = (char*)malloc(FRAME_ID_SIZE * sizeof(char));
-	position_msg.header.frame_id.size=0;
-	position_msg.header.frame_id.capacity=FRAME_ID_SIZE;	
-	sprintf(position_msg.header.frame_id.data, "FramP");	
-	position_msg.header.frame_id.size = strlen(position_msg.header.frame_id.data);	
-*/
+	odom_msg.header.frame_id.data = (char*)malloc(FRAME_ID_SIZE * sizeof(char));
+	odom_msg.header.frame_id.size=0;
+	odom_msg.header.frame_id.capacity=FRAME_ID_SIZE;	
+	sprintf(odom_msg.header.frame_id.data, "FrameO");	
+	odom_msg.header.frame_id.size = strlen(odom_msg.header.frame_id.data);	
+
+	odom_msg.child_frame_id.data = (char*)malloc(FRAME_ID_SIZE * sizeof(char));
+	odom_msg.child_frame_id.size=0;
+	odom_msg.child_frame_id.capacity=FRAME_ID_SIZE;	
+	sprintf(odom_msg.child_frame_id.data, "FrameC");	
+	odom_msg.child_frame_id.size = strlen(odom_msg.child_frame_id.data);	
+*/	
 }
 
 
@@ -358,10 +392,10 @@ extern "C"  void appMain(void * arg)
 	RCCHECK(rclc_timer_init_default(&log_info_timer, &support, RCL_MS_TO_NS(5000), log_info_timer_callback));
 
 	rcl_timer_t sensor_data_publish_timer = rcl_get_zero_initialized_timer();
-	RCCHECK(rclc_timer_init_default(&sensor_data_publish_timer, &support, RCL_MS_TO_NS(500), sensor_data_publish_timer_callback));
+	RCCHECK(rclc_timer_init_default(&sensor_data_publish_timer, &support, RCL_MS_TO_NS(20), sensor_data_publish_timer_callback));
 
-	RCCHECK(rclc_publisher_init_default(&position_publisher, &node,
-		ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Pose2D), "hadabot/pose2D"));
+	RCCHECK(rclc_publisher_init_default(&odom_publisher, &node,
+		ROSIDL_GET_MSG_TYPE_SUPPORT(hadabot_msgs, msg, Odom2D), "hadabot/odom2d"));
 
 /*	
 	RCCHECK(rclc_publisher_init_default(&wheel_radps_left_publisher, &node,
@@ -433,7 +467,7 @@ extern "C"  void appMain(void * arg)
 	
 	//RCCHECK(rcl_publisher_fini(&wheel_radps_left_publisher, &node));
 	//RCCHECK(rcl_publisher_fini(&wheel_radps_right_publisher, &node));
-	RCCHECK(rcl_publisher_fini(&position_publisher, &node));
+	RCCHECK(rcl_publisher_fini(&odom_publisher, &node));
 	RCCHECK(rcl_publisher_fini(&distance_publisher, &node));
 		
 	RCCHECK(rcl_subscription_fini(&subscriber_wheel_power_left, &node));
