@@ -21,6 +21,7 @@ public:
 	
 	void getAngularVelocity(float *val, int *sec, unsigned int *nanosec);
 	float getAngularVelocityAtTime(double est_time);
+	float getAngularVelocity();
 
 	
 	inline uint32_t getSensorPIN() {return sensor_pin;};

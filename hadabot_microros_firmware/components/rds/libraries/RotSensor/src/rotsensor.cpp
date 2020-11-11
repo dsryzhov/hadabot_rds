@@ -32,7 +32,7 @@ static void IRAM_ATTR rotation_sensor_gpio_isr_handler(void* arg)
 
 		double delta_time_sec = cur_time_sec - last_time_sec;
 
-		if (delta_time_sec > 0 ) {
+		if (delta_time_sec > 0)  { //0.012 ) {
 			
 		
 			sensor->setLastMeasuredTime(cur_time_sec);
@@ -72,6 +72,12 @@ static void sensor_radsp_calc_task(void* arg)
 	double full_delta_time_sec;
 	int sign;
 	int sensor_level;
+	
+	float tau = 0.027*2;
+	float alfa = tau / (tau+0.027); 
+
+	float prev_angular_velociy = 0;
+
     for(;;) {
         if(xQueueReceive(sensor_evt_queue, &delta_time_sec, xDelay) == pdTRUE ) {
 			portENTER_CRITICAL_ISR(&timerMux);
@@ -83,8 +89,9 @@ static void sensor_radsp_calc_task(void* arg)
 			if (sensor_level == 1) {
 				if (prev_delta_time_sec != 0) {
 						full_delta_time_sec = delta_time_sec + prev_delta_time_sec;
+						prev_angular_velociy = angular_velocity;
 						angular_velocity = 2*3.141596 / disk_holes_count / full_delta_time_sec;
-
+						
 						motor_state = pMotor->getMotorState();
 						if (motor_state > 0) sign = 1;
 						else 
@@ -92,6 +99,8 @@ static void sensor_radsp_calc_task(void* arg)
 							else sign = 0;
 					
 						angular_velocity = angular_velocity * sign;	
+
+						angular_velocity = (1-alfa)*angular_velocity + alfa*prev_angular_velociy;
 						
 						//portENTER_CRITICAL_ISR(&timerMux);
 						
@@ -157,7 +166,18 @@ RotationSensor::~RotationSensor() {
 	timerEnd(timer);
 	if (sensorTask != NULL) vTaskDelete(sensorTask);
 }
-	
+
+float RotationSensor::getAngularVelocity()
+{
+	float res;
+	double _time;
+	portENTER_CRITICAL_ISR(&timerMux);
+	res = angular_velocity;			
+	_time = measured_time;
+	portEXIT_CRITICAL_ISR(&timerMux);	
+	return res;
+}
+
 
 void RotationSensor::getAngularVelocity(float *val, int *sec, unsigned int *nanosec)
 {
