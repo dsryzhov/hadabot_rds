@@ -123,7 +123,10 @@ I use utility hub4com
 https://sourceforge.net/projects/com0com/
 
 you can run it in Windows with COM port and TCP port defined
+
+```bash
 com2tcp-rfc2217.bat COM3 3333
+```
 
 after that you can use idf.py commands flash\monitor inside container adding TCP port information.
 

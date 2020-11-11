@@ -1,0 +1,44 @@
+version: "3.7"
+
+services:
+  hadabot_ros2_web_bridge_service:
+    container_name: hadabot_ros2_web_bridge
+    image: hadabot/ros2-web-bridge:0.3.0
+    ports:
+      - "9090:9090"
+    networks:
+      - hadabot_network    
+      
+  hadabot_micro_ros_service:
+    container_name: hadabot_microros_agent
+    image: microros/micro-ros-agent:foxy
+    ports:
+      - "8888:8888/udp"
+    command:  udp4 --port 8888 -v1
+    networks:
+      - hadabot_network    
+
+      
+  hadabot_controller_service:
+    container_name: hadabot_ros2
+    image: ros:foxy
+    networks:
+      - hadabot_network
+    entrypoint: /bin/bash -c "source /opt/ros/foxy/setup.bash && cd /home/dsryzhov/hadabot/hadabot_rds/ros_ws && colcon build && . ./install/local_setup.bash && ros2 launch ./launch/hadabot_launch.py"
+    volumes:
+      - ./../:/home/dsryzhov/hadabot/hadabot_rds/ros_ws
+
+  hadabot_navigation_service:
+    container_name: hadabot_navigation
+    image: rosplanning/navigation2:main.release
+    networks:
+      - hadabot_network
+    command: /bin/bash -c "source /opt/ros/foxy/setup.bash && cd /home/dsryzhov/hadabot/hadabot_rds/ros_ws/launch && ros2 launch ./hadabot_nav2_launch.py"
+    volumes: 
+      - ./../:/home/dsryzhov/hadabot/hadabot_rds/ros_ws
+     
+  
+networks:
+  hadabot_network:
+
+
