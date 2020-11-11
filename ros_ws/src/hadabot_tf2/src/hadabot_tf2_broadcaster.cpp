@@ -26,7 +26,7 @@ public:
 private:
     void pose_callback(const nav_msgs::msg::Odometry::SharedPtr msg) const
     {
-        rclcpp::Time now;
+        //rclcpp::Time now = this->now(); ;
         // RCLCPP_INFO(this->get_logger(), "Pose: '%f'", msg->x);
 
         geometry_msgs::msg::TransformStamped odom_tf;
@@ -44,7 +44,7 @@ private:
 
         base_link_tf.header.frame_id = "odom";
         base_link_tf.child_frame_id = "base_link";
-        base_link_tf.header.stamp = now;
+        base_link_tf.header.stamp = msg->header.stamp;
         tf_broadcaster_->sendTransform(base_link_tf);
 
         odom_tf.transform.translation.x = 0.0;
@@ -58,7 +58,7 @@ private:
 
         odom_tf.header.frame_id = "map";
         odom_tf.child_frame_id = "odom";
-        odom_tf.header.stamp = now;
+        odom_tf.header.stamp = msg->header.stamp;
         tf_broadcaster_->sendTransform(odom_tf);
     }
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr subscription_;
