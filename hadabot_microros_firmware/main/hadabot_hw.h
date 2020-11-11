@@ -7,6 +7,8 @@
 #include "PosEstimator.h"
 //#include "TinyMPU6050.h"
 #include "MPU6050.h"
+#include "MotionController.h"
+#include "PosController.h"
 
 
 class HadabotHW {
@@ -23,8 +25,11 @@ public:
 	inline HCSR04* getHCSR04() {return &hcsr04;}
 	inline PosEstimator* getPosEstimator() { return &pos_estimator;}
 	inline MPU6050* getMPU6050() {return &mpu;}
+	inline MotionController* getMotionController() { return &motion_controller;}
+	inline PosController* getPosController() { return &pos_controller;}
 	
 	void updatePosition();
+
 	
 protected:
 	Motor leftMotor;
@@ -35,6 +40,8 @@ protected:
 	MPU6050 mpu;
 	
 	PosEstimator pos_estimator;
+	MotionController motion_controller;
+	PosController pos_controller;
 
 };
 

@@ -10,9 +10,46 @@
 #define RIGHT_MOTOR_FORWARD_CHANNEL 1
 #define RIGHT_MOTOR_BACKWARD_CHANNEL 3
 
+#define WHEELS_BASE 0.117
+#define WHEEL_RADIUS 0.032
+#define WHEEL_MAX_ANGULAR_VELOCITY 21
+
 
 #define LEFT_ROTATION_SENSOR_TIMER_NUM   0
 #define RIGHT_ROTATION_SENSOR_TIMER_NUM   1
+
+
+#define PIN_SDA 21
+#define PIN_CLK 22
+#define MPU_INTERRUPT_PIN 4
+
+void task_initI2C(void *ignore) {
+	i2c_config_t conf;
+	conf.mode = I2C_MODE_MASTER;
+	conf.sda_io_num = (gpio_num_t)PIN_SDA;
+	conf.scl_io_num = (gpio_num_t)PIN_CLK;
+	conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
+	conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
+	conf.master.clk_speed = 400000;
+	ESP_ERROR_CHECK(i2c_param_config(I2C_NUM_0, &conf));
+	ESP_ERROR_CHECK(i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0));
+	vTaskDelete(NULL);
+}
+
+volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin has gone high
+void dmpDataReady()
+{
+	mpuInterrupt = true;
+}
+
+extern "C" bool isDmpDataReady() {
+	if (mpuInterrupt) {
+		mpuInterrupt = false;
+		return true;
+	} return false;
+}
+ 
+
 
 /*
 TODO
@@ -48,37 +85,27 @@ HadabotHW::HadabotHW() :
 		CONFIG_HADABOT_RIGHT_ROT_SENSOR_HOLE_WIDTH_RATIO),
 	hcsr04(CONFIG_HADABOT_FW_SONAR_TRIG_PIN, 
 		   CONFIG_HADABOT_FW_SONAR_ECHO_PIN, 20, 4000),
-	pos_estimator(0.032, 0.117)
+	pos_estimator(WHEEL_RADIUS, WHEELS_BASE)
 
 {
 //			  uint32_t flags = ESP_INTR_FLAG_EDGE |//< Edge-triggered interrupt
 //    ESP_INTR_FLAG_IRAM; //< ISR can be called if cache is disabled
 
 
-	pos_estimator.init(&leftWheelRotationSensor, &rightWheelRotationSensor, &mpu);
+	pos_estimator.init(&leftWheelRotationSensor, &rightWheelRotationSensor, &mpu, &pos_controller);
 
 	leftWheelRotationSensor.setPositionUpdateCallback(&pos_estimator);
 	rightWheelRotationSensor.setPositionUpdateCallback(&pos_estimator);
 
+	motion_controller.init(&leftMotor, &rightMotor, &leftWheelRotationSensor, &rightWheelRotationSensor);//0.143852, 21);
+	motion_controller.setParams(WHEEL_RADIUS, WHEELS_BASE, WHEEL_MAX_ANGULAR_VELOCITY);
+
+	pos_controller.init(&motion_controller);
+
+	pos_controller.setParams(0.45, 7.85, 0.1, 0.3, 0.3, 20);
 }
 
 HadabotHW::~HadabotHW() {
-}
-
-#define PIN_SDA 21
-#define PIN_CLK 22
-
-void task_initI2C(void *ignore) {
-	i2c_config_t conf;
-	conf.mode = I2C_MODE_MASTER;
-	conf.sda_io_num = (gpio_num_t)PIN_SDA;
-	conf.scl_io_num = (gpio_num_t)PIN_CLK;
-	conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
-	conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
-	conf.master.clk_speed = 400000;
-	ESP_ERROR_CHECK(i2c_param_config(I2C_NUM_0, &conf));
-	ESP_ERROR_CHECK(i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0));
-	vTaskDelete(NULL);
 }
 
 
@@ -93,6 +120,7 @@ void HadabotHW::begin() {
     xTaskCreate(&task_initI2C, "mpu_task", 2048, NULL, 6, NULL);
     vTaskDelay(500/portTICK_PERIOD_MS);
 
+
 	mpu.initialize();
 
 	mpu.dmpInitialize();
@@ -103,10 +131,20 @@ void HadabotHW::begin() {
 	mpu.setZGyroOffset(-85);
 	mpu.setZAccelOffset(1788);
 
+	mpu.CalibrateAccel(6);
+	mpu.CalibrateGyro(6);
+	//mpu.PrintActiveOffsets();
+	
 	mpu.setDMPEnabled(true);
 
+	printf("=========== Mpu rate %d\n", (int)mpu.getRate()) ;
 
-//	mpu.Calibrate();
+	attachInterrupt(digitalPinToInterrupt(MPU_INTERRUPT_PIN), dmpDataReady, RISING);
+	
+	vTaskDelay(500/portTICK_PERIOD_MS);
+
+	pos_estimator.begin();
+	motion_controller.begin();
 	
 	printf("Hadabot Hw started.\n");
 }

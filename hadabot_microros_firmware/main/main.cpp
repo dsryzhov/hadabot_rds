@@ -12,6 +12,7 @@
 
 #include "lwip/err.h"
 #include "lwip/sys.h"
+#include "SntpSync.h"
 
 */
 
@@ -29,6 +30,8 @@
 HadabotHW hadabot_hw;
 
 extern "C" void microros_interface_init(HadabotHW* _pHadabotHW);
+
+extern "C" void host_sntp_sync_time(void);
 
 void wifi_init_sta()
 {
@@ -70,6 +73,8 @@ extern "C" void app_main(void)
 
     Serial.begin(115200);
     wifi_init_sta();
+
+    host_sntp_sync_time();
 #endif  // UCLIENT_PROFILE_UDP
 
     hadabot_hw.begin();
