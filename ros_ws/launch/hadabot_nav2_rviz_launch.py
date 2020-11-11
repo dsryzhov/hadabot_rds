@@ -143,11 +143,11 @@ def generate_launch_description():
     ld.add_action(declare_bt_xml_cmd)
     ld.add_action(declare_autostart_cmd)
 
-    #ld.add_action(declare_rviz_config_file_cmd)
-    #ld.add_action(declare_use_rviz_cmd)
+    ld.add_action(declare_rviz_config_file_cmd)
+    ld.add_action(declare_use_rviz_cmd)
 
     # Add the actions to launch all of the navigation nodes
-    #ld.add_action(rviz_cmd)
+    ld.add_action(rviz_cmd)
     ld.add_action(nav2_bringup_cmd)
 
     return ld
