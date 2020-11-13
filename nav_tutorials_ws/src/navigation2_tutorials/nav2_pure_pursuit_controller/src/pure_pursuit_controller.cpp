@@ -133,6 +133,7 @@ auto goal_pose = std::find_if(
 
   double linear_vel, angular_vel;
 
+/*
   double phi = atan(goal_pose.position.y / goal_pose.position.x);
   RCLCPP_INFO(
     logger_,
@@ -157,8 +158,10 @@ auto goal_pose = std::find_if(
     else 
       angular_vel = -max_angular_vel_;
   }
+  */
 
-/*
+  geometry_msgs::msg::TwistStamped cmd_vel;
+
   // If the goal pose is in front of the robot then compute the velocity using the pure pursuit algorithm
   // else rotate with the max angular velocity until the goal pose is in front of the robot
   if (goal_pose.position.x > 0) {
@@ -166,25 +169,27 @@ auto goal_pose = std::find_if(
       (goal_pose.position.x * goal_pose.position.x + goal_pose.position.y * goal_pose.position.y);
     linear_vel = desired_linear_vel_;
     angular_vel = desired_linear_vel_ * curvature;
+
+    cmd_vel.twist.angular.z = max(
+      -1.0 * abs(max_angular_vel_), min(
+        angular_vel, abs(
+          max_angular_vel_)));
+
   } else {
     linear_vel = 0.0;
-    angular_vel = max_angular_vel_;
+    angular_vel = 10;//max_angular_vel_;
   }
-*/
+
 
   rclcpp::Time now = clock_->now();
   // Create and publish a TwistStamped message with the desired velocity
-  geometry_msgs::msg::TwistStamped cmd_vel;
+
   cmd_vel.header.frame_id = pose.header.frame_id;
   cmd_vel.header.stamp = now;
   cmd_vel.twist.linear.x = linear_vel;
   cmd_vel.twist.linear.y = 0;
   cmd_vel.twist.angular.x = 0;
   cmd_vel.twist.angular.y = 0;
-  cmd_vel.twist.angular.z = max(
-    -1.0 * abs(max_angular_vel_), min(
-      angular_vel, abs(
-        max_angular_vel_)));
 
   RCLCPP_INFO(
     logger_,

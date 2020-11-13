@@ -86,9 +86,9 @@ controller_server:
   ros__parameters:
     use_sim_time: False
     controller_frequency: 50.0
-    min_x_velocity_threshold: 0.001
+    min_x_velocity_threshold: 0.3
     min_y_velocity_threshold: 0.5
-    min_theta_velocity_threshold: 0.001
+    min_theta_velocity_threshold: 7.0
     progress_checker_plugin: "progress_checker"
     goal_checker_plugin: "goal_checker"
     controller_plugins: ["FollowPath"]
@@ -101,16 +101,16 @@ controller_server:
     # Goal checker parameters
     goal_checker:
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.25
-      yaw_goal_tolerance: 0.25
+      xy_goal_tolerance: 0.1
+      yaw_goal_tolerance: 0.75
       stateful: True
     # DWB parameters
     FollowPath:
       plugin: "nav2_pure_pursuit_controller::PurePursuitController"
       debug_trajectory_details: True
-      desired_linear_vel: 0.45
+      desired_linear_vel: 0.55
       lookahead_dist: 0.4
-      max_angular_vel: 8.0
+      max_angular_vel: 1.2
       transform_tolerance: 1.0
 
 controller_server_rclcpp_node:
