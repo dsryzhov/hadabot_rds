@@ -41,18 +41,19 @@ public:
 
     inline TaskHandle_t getEvtQueue() { return pos_control_evt_queue; }
 
-    void controlDelay();
-    void updateMotion();
-
+    
     inline float calcDistanceToGoal();
     inline float calcAngle2GoalPosition();
     inline float calcAngle2GoalOrientation();
+    void calcLocalGoalPose(float &gx, float &gy);
 
-    MotionType selectNeededMotionType();
-    bool updateMotionType(MotionType new_motion_type);
+    void controlDelay();
+    void updateMotion();
+    virtual bool updateMotionType(MotionType new_motion_type);
 
-    void MoveStep(int dir );
-    void RotateStep(int dir);
+    virtual MotionType selectNeededMotionType() = 0;
+    virtual void MoveStep(int dir ) = 0;
+    virtual void RotateStep(int dir);
         
 
 protected:

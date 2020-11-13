@@ -10,7 +10,9 @@ set(LIBRARY_SRCS
   libraries/KalmanFilter/Kalman.cpp 
   libraries/MotionController/MotionController.cpp 
   libraries/SntpSync/sntp_sync.cpp 
-  libraries/PosController/PosController.cpp 
+  libraries/PosController/PosControllerRM.cpp 
+  libraries/PosController/PosPurePursuitController.cpp 
+  libraries/PosController/PosController.cpp  
   )
   
 set(COMPONENT_SRCS ${LIBRARY_SRCS})  

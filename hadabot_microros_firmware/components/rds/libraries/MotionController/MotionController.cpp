@@ -125,10 +125,13 @@ void MotionController::updateMotion(float _linear_velocity, float _angular_veloc
     
     v_r = ((2.0 * v) + (w * wheelbase_m)) / (2 * wheel_radius_m);
     v_l = ((2.0 * v) - (w * wheelbase_m)) / (2 * wheel_radius_m);
+
+    printf("v_l: %f v_r: %f\n", v_l, v_r);
     
     pw_r = v_r / max_wheel_angular_velocity; // 21 - max possible rad/s for my motors
     pw_l = v_l / max_wheel_angular_velocity;
 
+  
 
     if  (pw_r > 1.0) pw_r = 1.0;
     else if (pw_r < -1.0) pw_r = -1.0;

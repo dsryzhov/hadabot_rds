@@ -8,7 +8,7 @@
 //#include "TinyMPU6050.h"
 #include "MPU6050.h"
 #include "MotionController.h"
-#include "PosController.h"
+#include "PosPurePursuitController.h"
 
 
 class HadabotHW {
@@ -41,7 +41,7 @@ protected:
 	
 	PosEstimator pos_estimator;
 	MotionController motion_controller;
-	PosController pos_controller;
+	PosPurePursuitController pos_controller;
 
 };
 
