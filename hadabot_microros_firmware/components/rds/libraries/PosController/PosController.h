@@ -12,6 +12,10 @@ enum PosControllerMode {
     IDLE, NAVIGATION
 };
 
+enum PosState {
+    POS_START_ROTATION, POS_ROTATION, POS_STOPED, POS_START_MOVE, POS_MOVE
+};
+
 class PosController : public IPosController {
 public:
     PosController();
@@ -22,7 +26,7 @@ public:
     void setCurrentPosition(Position _current_position, Twist _twist) override;
     void setGoalPosition(Position _goal_position) override;
 
-    void stopNavigation();
+    void stopNavigation(const char* from);
 
     void setParams(float _desired_linear_velocity,
               float _desired_angular_velocity, 
@@ -46,10 +50,14 @@ public:
 
     MotionType selectNeededMotionType();
     bool updateMotionType(MotionType new_motion_type);
+
+    void MoveStep(int dir );
+    void RotateStep(int dir);
         
 
 protected:
     PosControllerMode controller_mode;
+    PosState position_state;
 
     TaskHandle_t posControlTask;
     xQueueHandle pos_control_evt_queue = NULL;
@@ -67,6 +75,8 @@ protected:
     float angle2goal_orientation;
     float linear_velocity;
     float angular_velocity;
+    float angle_error;
+    float pos_error;
 
     float distance2goal_thresh;
     float angle2goal_pos_thresh;
@@ -75,6 +85,9 @@ protected:
     float desired_angular_velocity;
     float pos_control_period_ms;
 
+    float iPart;
+    float Ki;
+    float Kp;
 };
 
 #endif

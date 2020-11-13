@@ -157,6 +157,8 @@ void sensor_data_publish_timer_callback(rcl_timer_t * timer, int64_t last_call_t
 	odom2d_msg.v = twist.v;
 	odom2d_msg.w = twist.w;
 
+	//printf("twsit.v : %f\n", twist.v);
+
 			
 	odom2d_msg.stamp.sec = time_sec;
 	odom2d_msg.stamp.nanosec = time_nsec;

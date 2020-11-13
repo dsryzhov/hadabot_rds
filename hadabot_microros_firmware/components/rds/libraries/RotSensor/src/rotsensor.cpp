@@ -128,7 +128,8 @@ static void sensor_radsp_calc_task(void* arg)
 			motor_state = pMotor->getMotorState();
 			if (motor_state == STOPING_FORWARD || motor_state == STOPING_BACKWARD) {
 				sensor->getMotor()->evStoped();
-				sensor->setAngularVelocity(0, zero_angular_velocity_delay_ms);
+				//sensor->setAngularVelocity(0, zero_angular_velocity_delay_ms);
+				sensor->setAngularVelocity(0, 0);
 				prev_delta_time_sec = 0;
 			}
 		}

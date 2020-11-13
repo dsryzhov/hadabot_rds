@@ -42,22 +42,7 @@ void PosEstimator::getTwist(Twist& _twist) {
     _twist.w = twist.w;
 }
 
-void PosEstimator::positionUpdateCallback(double measure_time, double measure_delta_time) {
-		
-    double wav_l = pLeftWheelRotationSensor->getAngularVelocityAtTime(measure_time);
-    double wav_r = pRightWheelRotationSensor->getAngularVelocityAtTime(measure_time);
 
-
-    double dt_s = measure_time - pos_update_time;
-
-    if (dt_s > measure_delta_time) dt_s = measure_delta_time;
-
-    if (updatePosition(wav_l, wav_r, dt_s))
-    	pos_update_time = measure_time;
-    
-    pPosController->setCurrentPosition(pos, twist); 
-
-}
 
 bool PosEstimator::updateMpuAngles()
 {
@@ -125,7 +110,33 @@ bool PosEstimator::updateMpuAngles()
 
 }        
 
+void PosEstimator::positionUpdateCallback(double measure_time, double measure_delta_time) {
+
+            
+        double wav_l = pLeftWheelRotationSensor->getAngularVelocityAtTime(measure_time);
+        double wav_r = pRightWheelRotationSensor->getAngularVelocityAtTime(measure_time);
+
+
+        double dt_s = measure_time - pos_update_time;
+
+        if (dt_s > measure_delta_time) dt_s = measure_delta_time;
+
+        if (abs(dt_s) > 0.1) return;
+
+        if (updatePosition(wav_l, wav_r, dt_s)) {
+            pos_update_time = measure_time;
+        }
+
+        pPosController->setCurrentPosition(pos, twist);         
+}
+
 bool PosEstimator::updatePosition(double wav_l, double wav_r, double dt_s) {
+    if (dt_s == 0) {
+        twist.v = 0;
+        twist.w = 0;
+        return false;        
+    }
+
     updateMpuAngles();
 
    // printf("w_l: %f  w_r: %f\n", wav_l, wav_r);
@@ -138,11 +149,17 @@ bool PosEstimator::updatePosition(double wav_l, double wav_r, double dt_s) {
 
     double phi_rad = (d_right_m - d_left_m) / wheelbase_m;
 
+    
     float velocity = d_center_m / dt_s;
     float angular_velocity = phi_rad / dt_s;
 
     //if (twist.v > 0.68 || angular_velocity > 10 ) return false;
-    if (velocity > 1 ) return false;
+    
+    if (abs(velocity) > 1 ) {
+        twist.v = 0;
+        twist.w = 0;
+        return false;
+    }
 
 
     double x_m_dt = d_center_m * std::cos(pos.theta);
@@ -176,8 +193,8 @@ bool PosEstimator::updatePosition(double wav_l, double wav_r, double dt_s) {
 
     float delta_angular_velocity = abs(mpu_angular_velocity - angular_velocity);
 
-    twist.v = wav_l;//velocity;
-    twist.w = wav_r;//mpu_angular_velocity; //gx;   //gyro_data[2] / 2000.0 * PI / 180.0;
+    twist.v = velocity;
+    twist.w = mpu_angular_velocity;//mpu_angular_velocity; //gx;   //gyro_data[2] / 2000.0 * PI / 180.0;
 
     pos.theta = mpu_theta;
 

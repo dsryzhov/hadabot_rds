@@ -31,7 +31,7 @@ PosController::PosController() : current_position(0,0,0)
 }
 
 PosController::~PosController() {
-    stopNavigation();
+    stopNavigation("Destructor");
 }
 
 void PosController::setParams(float _desired_linear_velocity,
@@ -55,21 +55,32 @@ void PosController::init(IMotionController* _pMotionController) {
 
 
 void PosController::setCurrentPosition(Position _current_position, Twist _twist) {
-    current_position = _current_position;
-    current_twist = _twist;
-    //printf("current position x: %f y: %f theta %f\n", current_position.x, current_position.y, current_position.theta);
+    current_position.x = _current_position.x;
+    current_position.y = _current_position.y;
+    current_position.theta = _current_position.theta;
+    current_twist.v = _twist.v;
+    current_twist.w = _twist.w;
+    printf("current position x: %f y: %f theta %f\n", current_position.x, current_position.y, current_position.theta);
 }
 
-void PosController::setGoalPosition(Position _goal_position) {
+void PosController::setGoalPosition(Position local_goal_position) {
+    if (local_goal_position.x == 0 && local_goal_position.y == 0 && local_goal_position.theta == 0) {
+        if (controller_mode == NAVIGATION) stopNavigation("setGoalPosition");
+        return;
+    }
+
     float th = current_position.theta;
     float cos_th = cos(th);
     float sin_th = sin(th);
-    float dx = _goal_position.x;
-    float dy = _goal_position.y;
+    float dx = local_goal_position.x;
+    float dy = local_goal_position.y;
 
     goal_position.x = current_position.x + dx*cos_th - dy*sin_th;
     goal_position.y = current_position.y + dx*sin_th + dy*cos_th;
-    goal_position.theta = current_position.theta + _goal_position.theta;
+
+    float alfa = atan2(dy, dx);
+
+    goal_position.theta = current_position.theta + alfa + local_goal_position.theta;
     wrapAngle(goal_position.theta);
 
     printf("New goal position xw : %f yw: %f theta: %f\n", goal_position.x, goal_position.y, goal_position.theta);    
@@ -83,9 +94,15 @@ void PosController::controlDelay() {
     vTaskDelay(pos_control_period_ms/portTICK_PERIOD_MS);
 }
 
-void PosController::stopNavigation() {
+void PosController::stopNavigation(const char* from) {
     controller_mode = IDLE;
-   
+    pMotionController->updateMotion(0, 0);
+    iPart = 0;
+    current_motion_type = STOP;
+    position_state = POS_STOPED;
+    angle_error = 0;
+    pos_error = 0;
+    printf("Navigation is stoped from %s\n", from);
 /*   
     if (posControlTask != NULL) {
         vTaskDelete(posControlTask);
@@ -94,13 +111,6 @@ void PosController::stopNavigation() {
   */  
 }
 
-void PosController::updateMotion() {
-    if (controller_mode == NAVIGATION) {
-        MotionType new_motion_type = selectNeededMotionType();
-        updateMotionType(new_motion_type);
-        if (new_motion_type == STOP)  stopNavigation();
-    }
-}
 
 
 inline float PosController::calcDistanceToGoal() {
@@ -108,34 +118,64 @@ inline float PosController::calcDistanceToGoal() {
     float dy = goal_position.y - current_position.y;
     float distance = sqrt(dx*dx+dy*dy);
 
+    float distanse_cos_alfa = dx*cos(current_position.theta) + dy*sin(current_position.theta);
+    printf("distanse_cos_alfa %f\n", distanse_cos_alfa);
+
+    if (distanse_cos_alfa < 0) distance*=-1; 
+
+    //float distance = dx;
+
     printf("Distance to goal: %f\n", distance);
 
     return distance;
 }
 
 inline float PosController::calcAngle2GoalPosition() {
+    
     float dx = goal_position.x - current_position.x;
     float dy = goal_position.y - current_position.y;
 
-    float pos_angle = atan2(dy, dx);
+    float pos_theta = atan2(dy, dx);
+
+    float cur_theta = current_position.theta;
+
+    if (pos_theta < 0) pos_theta+= 2*PI;
+    if (cur_theta < 0) cur_theta+= 2*PI;
+
   
-    float delta_angle = pos_angle - current_position.theta;
+    float delta_theta = pos_theta - cur_theta;
 
     //printf("dx: %f dy: %f pos_angle: %f delta_angle: %f\n", dx, dy, pos_angle, delta_angle);
 
-    wrapAngle(delta_angle);
+    wrapAngle(delta_theta);
 
-    printf("Angle to goal position: %f\n", delta_angle);
+    printf("Angle to goal position: %f\n", delta_theta);
 
-    return delta_angle;
+    return delta_theta;
 }
 
 
 inline float PosController::calcAngle2GoalOrientation() {
-    float delta_theta = goal_position.theta - current_position.theta;
+
+    float goal_theta = goal_position.theta;
+    float cur_theta = current_position.theta;
+
+    if (goal_theta < 0) goal_theta+= 2*PI;
+    if (cur_theta < 0) cur_theta+= 2*PI;
+
+    float delta_theta = goal_theta - cur_theta;
+    //float delta_theta = goal_position.theta - current_position.theta;
     wrapAngle(delta_theta);
     printf("Angle to goal orientation: %f\n", delta_theta);    
     return delta_theta;
+}
+
+void PosController::updateMotion() {
+    if (controller_mode == NAVIGATION) {
+        MotionType new_motion_type = selectNeededMotionType();
+        updateMotionType(new_motion_type);
+        //if (position_state == POS_STOPED)  stopNavigation("updateMotion");
+    }
 }
 
 MotionType PosController::selectNeededMotionType() {
@@ -143,16 +183,21 @@ MotionType PosController::selectNeededMotionType() {
     MotionType needed_motion_type;
 
     distance2goal = calcDistanceToGoal();
-    if (distance2goal > distance2goal_thresh) {
+    if (abs(distance2goal) > distance2goal_thresh) {
         // move to goal position
         angle2goal_pos = calcAngle2GoalPosition();
         if (abs(angle2goal_pos) > angle2goal_pos_thresh) {
             // rotate to goal position direction 
             if  (angle2goal_pos >= 0) needed_motion_type = ROTATE_CCW;
             else needed_motion_type = ROTATE_CW;
+            angle_error = angle2goal_pos;
         } else {
             // move to goal position
-            needed_motion_type = MOVE_FORWARD;
+            if (distance2goal >= 0)
+                needed_motion_type = MOVE_FORWARD;
+            else 
+                needed_motion_type = MOVE_BACKWARD;
+            pos_error = distance2goal;
         }
 
     } else {
@@ -162,6 +207,7 @@ MotionType PosController::selectNeededMotionType() {
             // rotate to goal orinentation
             if  (angle2goal_orientation >= 0) needed_motion_type = ROTATE_CCW;
             else needed_motion_type = ROTATE_CW;
+            angle_error = angle2goal_orientation;
         } else {
             // stop 
             needed_motion_type = STOP;
@@ -176,20 +222,85 @@ bool PosController::updateMotionType(MotionType new_motion_type) {
     bool flMotionUpdated;
 
     if (current_motion_type != new_motion_type) {
-        linear_velocity = 0;
-        angular_velocity = 0;
-        switch (new_motion_type)  {
-            case MOVE_FORWARD: linear_velocity = desired_linear_velocity; break;
-            case MOVE_BACKWARD: linear_velocity = -desired_linear_velocity; break;
-            case ROTATE_CW: angular_velocity = -desired_angular_velocity; break;
-            case ROTATE_CCW: angular_velocity = desired_angular_velocity; break;
-            default: break;
-        }
-        printf("Set motion wint linear velocity: %f and angular velocity: %f\n", linear_velocity, angular_velocity);
-        pMotionController->updateMotion(linear_velocity, angular_velocity);
-        current_motion_type = new_motion_type;
-        flMotionUpdated = true;            
-    } else flMotionUpdated = false;
+        iPart = 0;
+        if (new_motion_type == ROTATE_CW || new_motion_type == ROTATE_CCW)
+            position_state = POS_START_ROTATION;
+        
+        if (new_motion_type == MOVE_FORWARD || new_motion_type == MOVE_BACKWARD)
+            position_state = POS_START_MOVE;
+    } else {
+
+        //if (position_state == POS_ROTATION && current_twist.w == 0)
+        //    stopNavigation("updateMotionType 1");
+
+        //if (position_state == POS_MOVE && current_twist.v == 0)
+          //  stopNavigation("updateMotionType 2");
+    }
+
+    linear_velocity = 0;
+    angular_velocity = 0;
+    switch (new_motion_type)  {
+        case MOVE_FORWARD: MoveStep(1); break;
+        case MOVE_BACKWARD: MoveStep(-1); break;
+        case ROTATE_CW: RotateStep(-1); break;
+        case ROTATE_CCW: RotateStep(1); break;
+        default: stopNavigation("updateMotionType-swicth"); break;
+    }
+    //printf("Set motion wint linear velocity: %f and angular velocity: %f\n", linear_velocity, angular_velocity);
+    current_motion_type = new_motion_type;
+
+    flMotionUpdated = true;            
+
     return flMotionUpdated;
+}
+
+void PosController::MoveStep(int dir) {
+
+    Ki = 1;
+    Kp = 2.25;
+    float min_linear_velocity = 0.3;
+
+    if (position_state == POS_START_MOVE) {
+        iPart += desired_linear_velocity*Ki*dir;
+        linear_velocity = iPart;
+    }
+    else {
+        linear_velocity = min_linear_velocity*dir + pos_error*Kp;
+    }
+
+    if (abs(linear_velocity) >= desired_linear_velocity) {
+        linear_velocity = desired_linear_velocity*dir;
+        position_state = POS_MOVE;
+    }
+    pMotionController->updateMotion(linear_velocity, 0);
+    printf("Linear_velocity: %f pos_error: %f \n", linear_velocity, pos_error );
+}
+
+void PosController::RotateStep(int dir) {
+
+    Ki = 0.1;
+    Kp = 9.72;
+    float min_angular_velocity = 1; // rad
+
+    if (position_state == POS_START_ROTATION ) {
+        iPart += desired_angular_velocity*Ki*dir;
+
+        angular_velocity = iPart;
+    } 
+    else {
+        angular_velocity = min_angular_velocity*dir + angle_error*Kp;  
+       // printf("POS_ROTATION\n");      
+    }
+    
+    //angular_velocity = iPart + angle_error*Kp;
+
+
+    if (abs(angular_velocity) >= desired_angular_velocity) {
+        angular_velocity = desired_angular_velocity*dir;
+        position_state = POS_ROTATION;
+    }
+    //printf("Angular_velocity: %f error: %f \n", angular_velocity, angle_error );
+    pMotionController->updateMotion(0, angular_velocity);
+
 }
 

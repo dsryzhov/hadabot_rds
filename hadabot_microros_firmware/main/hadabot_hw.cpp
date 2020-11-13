@@ -13,11 +13,17 @@
 #define WHEELS_BASE 0.117
 #define WHEEL_RADIUS 0.032
 #define WHEEL_MAX_ANGULAR_VELOCITY 21
-
+#define DESIRED_LINEAR_VELOCITY 0.5
+#define DESIRED_ANGULAR_VELOCITY 10
 
 #define LEFT_ROTATION_SENSOR_TIMER_NUM   0
 #define RIGHT_ROTATION_SENSOR_TIMER_NUM   1
 
+#define GOAL_ANGLE_THRESH_RAD 0.3
+#define POS_ANGLE_THRESH_RAD 0.3
+#define DISTANCE_THRESH_M  0.02 
+#define POS_CONTROL_PERIOD_MS 20
+              
 
 #define PIN_SDA 21
 #define PIN_CLK 22
@@ -102,7 +108,12 @@ HadabotHW::HadabotHW() :
 
 	pos_controller.init(&motion_controller);
 
-	pos_controller.setParams(0.45, 7.85, 0.1, 0.3, 0.3, 20);
+	pos_controller.setParams(DESIRED_LINEAR_VELOCITY, 
+								DESIRED_ANGULAR_VELOCITY, 
+								DISTANCE_THRESH_M, 
+								POS_ANGLE_THRESH_RAD, 
+								GOAL_ANGLE_THRESH_RAD, 
+								POS_CONTROL_PERIOD_MS);
 }
 
 HadabotHW::~HadabotHW() {
