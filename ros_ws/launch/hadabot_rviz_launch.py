@@ -143,27 +143,11 @@ def generate_launch_description():
     ld.add_action(declare_bt_xml_cmd)
     ld.add_action(declare_autostart_cmd)
 
-    #ld.add_action(declare_rviz_config_file_cmd)
-    #ld.add_action(declare_use_rviz_cmd)
-
-    # Add turtlesim
-    #ld.add_action(Node(
-    #    package='hadabot_driver',
-    #    executable='hadabot_controller',
-    #    name='hadabot_controller'
-    #))
-
-    # Add tf2 broadcaster
-    #ld.add_action(Node(
-    #    package='hadabot_tf2',
-    #    executable='hadabot_tf2_broadcaster',
-    #    name='hadabot_tf2_broadbaster_node'
-    #))	
-
+    ld.add_action(declare_rviz_config_file_cmd)
+    ld.add_action(declare_use_rviz_cmd)
 
     # Add the actions to launch all of the navigation nodes
-    #ld.add_action(rviz_cmd)
-    ld.add_action(nav2_bringup_cmd)
-	
+    ld.add_action(rviz_cmd)
+    #ld.add_action(nav2_bringup_cmd)
 
     return ld

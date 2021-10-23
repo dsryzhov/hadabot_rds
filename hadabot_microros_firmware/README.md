@@ -197,6 +197,13 @@ ros2 topic pub --once /hadabot/wheel_power_right  std_msgs/msg/Float32 "{data: -
 ros2 topic pub --once /hadabot/wheel_power_right  std_msgs/msg/Float32 "{data: 0.0}"
 ```
 
+
+ros2 topic pub --once /hadabot/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 1.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}"
+ros2 topic pub --once /hadabot/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 7.85}}"
+
+ros2 topic pub --once /hadabot/goal_pose geometry_msgs/msg/Pose2D "{x: 0.0, y: 0.0, theta: 1.57}"
+
+
 5. Check that messages with wheels angular velocities were received 
 
 Check two terminals with message subscriptions made before 

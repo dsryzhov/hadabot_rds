@@ -17,7 +17,24 @@ services:
     command:  udp4 --port 8888 -v1
     networks:
       - hadabot_network    
-  
+
+  hadabot_controller_service:
+    container_name: hadabot_ros2
+    image: ros:foxy
+    networks:
+      - hadabot_network
+    entrypoint: /bin/bash -c "source /opt/ros/foxy/setup.bash && cd /home/dsryzhov/hadabot/hadabot_rds/ros_ws && colcon build && . ./install/local_setup.bash && ros2 launch ./launch/hadabot_launch.py"
+    volumes:
+      - ./../:/home/dsryzhov/hadabot/hadabot_rds/ros_ws
+
+  hadabot_navigation_service:
+    container_name: hadabot_navigation
+    image: dsryzhov/ros2-navigation:latest
+    networks:
+      - hadabot_network
+    command: /bin/bash -c "source /opt/ros/foxy/setup.bash && cd /home/dsryzhov/hadabot/hadabot_rds/ros_ws/launch && ros2 launch ./hadabot_nav2_launch.py"
+    volumes: 
+      - ./../:/home/dsryzhov/hadabot/hadabot_rds/ros_ws  
   
 networks:
   hadabot_network:
