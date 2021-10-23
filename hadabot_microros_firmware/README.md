@@ -3,20 +3,145 @@ see https://micro-ros.github.io/
 see www.hadabot.com
 
 Original firmware for Hadabot is based on MicroPython and communicates with ROS system over websocket.
-
-Micro-ROS based firmware are built using ESP IDF SDK (C++).
-Communication with ROS is based on UDP protocol. 
+This Micro-ROS based firmware are built using ESP IDF SDK (C++). Communication with ROS is based on UDP protocol. 
 For hardware control high level arduino-esp32 API is used.
 
-Micro-ROS firmware communicates with ROS2 over the same topics as original firmware:
-- publish message on topic /hadabot/log/info every 5 seconds
-- subscribes to topics /hadabot/wheel_power_left and /hadabot/wheel_power_right messages and controls motors based on receiving this messages
-- asynchronously (to measurements) publish topics /hadabot/wheel_radps_left and hadabot/wheel_radps_right every 15 ms (time period can be configured)
+This firmware can be used for implementing two control strategy:
+- local position and motion control with goal position received from ROS2
+- ROS2 navigation control with linear and angular velocity received from ROS2 navigation (via /cmd_vel topic)
 
-Main feature of this Hadabot firmware :
-- there is no control command lattency 
-- wheel angular velocities are measured for every sensor signal level change by default (sensor calibration is neeeded)
-- time period for wheels angular velocity measurements publication is 15 ms (can be configured). 
+By default the first strategy is used in code.
+For the second strategy to be used some modification in code is needed. (Position Controler switch off )
+In the future control strategy change will be implemented by ROS2 command. 
+
+Local position and motion control strategy does not use ROS2 navigation stack at all.
+Hadabot receives goal position and plan and implements the trajectory to this position by itself.
+This strategy was implemented to debug Hadabot motion control algorithms with neglecting communication (latency) problems when 
+communicating with PC. 
+
+The second control strategy (with ROS2 navigation) showed nearly the same very good results in trajectory following. 
+Problems with comminication latency were solved by additional design solutions.
+
+For ROS2 navigation scenario the main difference in PC and ESP32 roles are listed bellow:
+- time is sycnronised between PC and ESP32
+- position estimation (position, orientation, linear and angular velocities) is done on ESP32 
+- position measurements are sent to ROS2 topic with timestamp
+- ESP32 subscribes to target linear and angular velocities (not motor's power commands)
+- motion control is implemented on ESP32 (based on target linear and angular velocities) but not in ROS2 node on PC
+
+Another difference with measurements and control algorithms in the firmware
+- wheel angular velocities are measured for every sensor signal level change (sensor calibration is neeeded)
+- MPU6050 orientation measuremens are used for hadabot orientation and angular velocity estimation 
+(estimations based on wheels angular velosities are not used at all for position estimation)
+- PID regulator are used for motors controls
+
+These design solutions results in very small control command lattency and very accurate trajectory following by Hadabot.
+
+Below is the function decomposition of the firmware:
+
+Initialization functions:
+- ros2 communication initialization
+- time synchronization with ROS2
+
+Communication functions:
+- receive goal position from ROS2
+- receive linear and angular velosity from ROS 2
+- publish log messages
+- publish timestamped odom2 messages (every 20ms)
+- publish distance to forward obstacles
+
+Detection functions:
+- measure left wheel angular velocity
+- measure right wheel angular velocity
+- measure hadabot orientation (using MPU6050 sensor)
+- measure hadabot angular velocity (using MPU6050 sensor)
+- measure distance to forward obstacles 
+ 
+Control functions:
+- estimate current position
+- control position (used only in fully local control straegy)
+- control motor motion (two PID regulators)
+
+Main scenario for local position and motion control strategy with position goal received from ROS:
+- goal position is received from ROS2
+- hadabot' orintation and angular velocity  is estimated based on MPU6050 measurements
+- rotation sensors measure wheels angular velocities
+- local position estimator calculates hadabot linear velocity based on wheel's angular velocities
+- local position estimator gets hadabot orientation and angular velocity from MPU6050 measurements
+- local position estimator calculates current hadabot position and orientation based on calculated hadabot linear and angular velocities
+- local position controler compare current position with goal position
+- local position controler calculates new target linear and angular velocities of the hadabot (using PID regulator)
+- local motion controler calculates target left and right wheels power values based on calculated hadabot target linear and angular velocities
+- local motion contoroler calculates new current motor's power values (using PID regulatro) (and updates them every 20 ms)
+- motor controller set new current motor power values
+- position estimation is published to ros2 topic every 20ms (asyncronously)
+
+Main scenarion for ROS2 navigation:
+- target linear and angular velocity are received from ROS
+- goal position is received from ROS2
+- hadabot' orintation and angular velocity  is estimated based on MPU6050 measurements
+- rotation sensors measure wheels angular velocities
+- local position estimator calculates hadabot linear velocity based on wheel's angular velocities
+- local position estimator gets hadabot orientation and angular velocity from MPU6050 measurements
+- local position estimator calculates current hadabot position and orientation based on calculated hadabot linear and angular velocities
+- local motion controler calculates target left and right wheels power values based on received from ROS2 hadabot target linear and angular velocities
+- local motion contoroler calculates new current motor's power values (using PID regulatro) (and updates them every 20 ms)
+- motor controller set new current motor power values
+- position estimation is published to ros2 topic every 20ms (asyncronously)
+
+
+Micro-ROS firmware communitcates to ROS2 with the following  topics:
+- publish message on topic /hadabot/log/info every 5 seconds
+- subscribes to topics /cmd_vel and /hadabot/cmd_vel (can be uses any of these topics, reaction is the same)
+- subscribes to topics /hadabot/goal_pose
+- asynchronously (to measurements) publish topics hadabot/odom2d every 20 ms (time period can be configured)
+
+To neglect communication latency with ROS in ROS2 navigation scenario timestamped measurements are used
+- when initializing Micro-ROS time syncronization with ROS2 system is done
+- rotation sensors calculates angular velocities on EACH signal front change (not statistically, for example every 100ms)
+- rotation sensors timestamp their wheels angular velocities mesurements 
+- position estimator timestamps it's position estimation based on angular velocities mesurements timestamps
+- timestamps of current position estimation are sent to ROS topic odom2
+- timestamps of current position estimation are used in ROS2 navigation algorithms
+
+The following FreeRTOS tasks are used on ESP32:
+- ROS2 communication task 
+- motion controller task calculates and updates current motor power values
+- position controller task calculates and updates target linear and angular velocities of the hadabot
+- left wheel rotation sensor task (hadle events from left sensor IRQ)
+- right wheel rotation sensor task (hadle events from left sensor IRQ)
+
+The following interrupts handlers are used:
+- left rotation sensor IRQ hadler
+- right rotation sensor IRQ hadler
+
+
+There is no additional task for position estimation. Position estimation is called from rotation sensors tasks after each wheel angular velocity measurement.
+
+Main hadabot class HadabotHW is implemented in hadabot_hw.cpp
+https://github.com/dsryzhov/hadabot_rds/tree/master/hadabot_microros_firmware/main
+
+Other classes are implemented as components here
+https://github.com/dsryzhov/hadabot_rds/tree/master/hadabot_microros_firmware/components/rds/libraries
+
+ROS2 communicaton is implemented here
+https://github.com/dsryzhov/hadabot_rds/blob/master/hadabot_microros_firmware/main/microros_interface.cpp
+
+Wheel angular velocity estimation is implemented here
+https://github.com/dsryzhov/hadabot_rds/blob/master/hadabot_microros_firmware/components/rds/libraries/RotSensor/src/rotsensor.cpp
+
+Position estimation is implemented here (MPU6050 measurements are used for orientation estimation)
+https://github.com/dsryzhov/hadabot_rds/blob/master/hadabot_microros_firmware/components/rds/libraries/PosEstimator/src/PosEstimator.cpp
+
+Several position control algotithms are implemented (currently PosPurePursuitController is used in HadabotHW)
+https://github.com/dsryzhov/hadabot_rds/tree/master/hadabot_microros_firmware/components/rds/libraries/PosController
+
+Motion control adjust motor angular velocities based on difference between  target velocities and measures angular velocities of wheels 
+https://github.com/dsryzhov/hadabot_rds/blob/master/hadabot_microros_firmware/components/rds/libraries/MotionController/MotionController.cpp
+
+
+Motor control is implemented here
+https://github.com/dsryzhov/hadabot_rds/blob/master/hadabot_microros_firmware/components/rds/libraries/Motor/src/motor.cpp
 
 ## Micro-ROS agent
 
@@ -164,50 +289,28 @@ After that try to subscribe and publish ROS2 messages for Hadabot.
 ros2 topic echo /hadabot/log/info
 ```
 
-2. Subscribe to messages whith wheels angular velocities
+
+2. Subscribe to messages whith position odometry
 
 Run the following commands in two different terminals
 
 ```bash
-ros2 topic echo /hadabot/wheel_radps_left/temperature
-ros2 topic echo /hadabot/log/wheel_radps_right/temperature
+ros2 topic echo /hadabot/odom2
 ```
 
 
-Temperature message type is used to publish timestamped data from the firmware temporarily.
-In the future it will be changed to custom ROS message.
-
-3. Run forward, backward and stop commands for left motor
-
-Run the following commands in one terminal in sequence and check left motor rotation.
+3. Run the following command to set goal position for local position control scenario
 
 ```bash
-ros2 topic pub --once /hadabot/wheel_power_left  std_msgs/msg/Float32 "{data: 1.0}"
-ros2 topic pub --once /hadabot/wheel_power_left  std_msgs/msg/Float32 "{data: -1.0}"
-ros2 topic pub --once /hadabot/wheel_power_left  std_msgs/msg/Float32 "{data: 0.0}"
-```
-
-4. Run forward, backward and stop right motor
-
-Run the following commands in one terminal in sequence and check right motor rotation.
-
-```bash
-ros2 topic pub --once /hadabot/wheel_power_right  std_msgs/msg/Float32 "{data: 1.0}"
-ros2 topic pub --once /hadabot/wheel_power_right  std_msgs/msg/Float32 "{data: -1.0}"
-ros2 topic pub --once /hadabot/wheel_power_right  std_msgs/msg/Float32 "{data: 0.0}"
-```
-
-
-ros2 topic pub --once /hadabot/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 1.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}"
-ros2 topic pub --once /hadabot/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 7.85}}"
-
 ros2 topic pub --once /hadabot/goal_pose geometry_msgs/msg/Pose2D "{x: 0.0, y: 0.0, theta: 1.57}"
+```
 
+4. Run the following command to set target linear and angular velocity for
 
-5. Check that messages with wheels angular velocities were received 
-
-Check two terminals with message subscriptions made before 
-and validate that messages were received. 
+```bash
+ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 1.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}"
+ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 7.85}}"
+```
 
 ## Run Hadabot ROS2 nodes 
 
@@ -238,7 +341,3 @@ After you are finishged stop Hadabot containers using command
 ```bash
 docker-compose down
 ```
-
-
-
-
